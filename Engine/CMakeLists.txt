@@ -35,18 +35,20 @@ message("-- STB Image Path: ${STB_DIR}")
 target_include_directories(
     engine 
     PUBLIC 
-    UL::Logger
-    assimp::assimp
-    nlohmann_json::nlohmann_json
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${STB_DIR}
     ${Python3_INCLUDE_DIRS}
 )
+# 说明：UL::Logger / assimp::assimp / nlohmann_json::nlohmann_json 的 include 目录
+# 由各自的 target 通过 target_link_libraries 自动传递，不能当作目录名写进这里。
+
+# Vulkan 与 shaderc
+# shaderc::shaderc 由顶层 CMakeLists.txt 统一发现并暴露，
+# 具体是 vcpkg 拆分库还是 Vulkan SDK 的 shaderc_combined 由环境决定。
+target_link_libraries(engine PUBLIC Vulkan::Vulkan)
+target_link_libraries(engine PUBLIC shaderc::shaderc)
 
 if(APPLE)
-    target_link_libraries(engine PUBLIC libshaderc_combined.a)
-    target_link_libraries(engine PUBLIC Vulkan::Vulkan)
-
     # MacOS screen
     target_link_libraries(engine PUBLIC "-framework CoreFoundation")
     target_link_libraries(engine PUBLIC "-framework Metal")
@@ -59,21 +61,6 @@ if(APPLE)
     # target_link_libraries(program PUBLIC "-framework ")
 
     set_target_properties(engine PROPERTIES LINK_FLAGS "-Wl,-F/Library/Frameworks")
-elseif(WIN32)
-    # 设置库名称基于配置
-    set(GLSLANGL_LIBS 
-        "$<$<CONFIG:Debug>:shaderc_combinedd.lib>"
-        "$<$<CONFIG:Release>:shaderc_combined.lib>"
-        "$<$<CONFIG:RelWithDebInfo>:shaderc_combined.lib>"
-	)
-
-    # 链接库
-    message("-- Shaderc: ${Vulkan_LIBRARY_DIR}")
-    target_link_libraries(engine PUBLIC Vulkan::Vulkan)
-
-    # 把Vulkan目录下的动态库路径设置
-    target_link_directories(engine PUBLIC ${Vulkan_LIBRARY_DIR})
-    target_link_libraries(engine PUBLIC ${GLSLANGL_LIBS})
 endif()
 
 target_link_libraries(engine PUBLIC 
