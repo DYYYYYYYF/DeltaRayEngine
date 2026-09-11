@@ -39,13 +39,22 @@ void main(){
     OutDto.vTexcoord = vTexcoord;
     OutDto.vColor = vColor;
     
-    // 变换法线到世界空间
-    mat3 normalMatrix = mat3(PushConstant.model);
-    OutDto.vNormal = normalize((PushConstant.model * vec4(vNormal, 1.0))).rgb;
+    // 变换法线到世界空间：使用 model 的 3x3 部分的逆转置，以正确处理非均匀缩放
+    mat3 normalMatrix = transpose(inverse(mat3(PushConstant.model)));
 
-    // 计算(副)切线
-    OutDto.vTangent = vec4(normalize(normalMatrix * vTangent.xyz), vTangent.w);
-    OutDto.vBitangent = cross(OutDto.vNormal, OutDto.vTangent.xyz) * vTangent.w;
+    vec3 N = normalize(normalMatrix * vNormal);
+    OutDto.vNormal = N;
+
+    // 计算(副)切线：用同一法线矩阵变换后做 Gram-Schmidt 正交化
+    vec3 T = normalMatrix * vTangent.xyz;
+    if (dot(T, T) < 1e-8) {
+        // 退化保护：模型无 UV / 全为退化三角面时 tangent 为 (0,0,0)，避免 normalize 产生 NaN
+        vec3 up = (abs(N.z) < 0.999) ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+        T = cross(up, N);
+    }
+    T = normalize(T - dot(T, N) * N);
+    OutDto.vTangent = vec4(T, vTangent.w);
+    OutDto.vBitangent = cross(N, T) * vTangent.w;
     
     // 输出模式
     out_mode = GlobalUBO.mode;

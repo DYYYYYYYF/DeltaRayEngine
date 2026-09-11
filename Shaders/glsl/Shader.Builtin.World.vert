@@ -37,8 +37,20 @@ void main(){
 	OutDto.vAmbientColor = GlobalUBO.ambient_color;
 	OutDto.vViewPosition = GlobalUBO.view_position;
 	OutDto.vFragPosition = vec3(PushConstant.model * vec4(vPosition, 1.0f));
-	OutDto.vNormal = normalize(mat3(PushConstant.model) * vNormal);
-	OutDto.vTangent = vec4(normalize(mat3(PushConstant.model) * vTangent.xyz), vTangent.w);
+	// 法线矩阵：model 的 3x3 部分的逆转置，以正确处理非均匀缩放
+	mat3 normalMatrix = transpose(inverse(mat3(PushConstant.model)));
+
+	vec3 N = normalize(normalMatrix * vNormal);
+	OutDto.vNormal = N;
+
+	// 切线：同一矩阵变换后做 Gram-Schmidt 正交化，并对退化输入做保护
+	vec3 T = normalMatrix * vTangent.xyz;
+	if (dot(T, T) < 1e-8) {
+		vec3 up = (abs(N.z) < 0.999) ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+		T = cross(up, N);
+	}
+	T = normalize(T - dot(T, N) * N);
+	OutDto.vTangent = vec4(T, vTangent.w);
 	gl_Position = GlobalUBO.projection * GlobalUBO.view * PushConstant.model * vec4(vPosition, 1.0f);
 
 	out_mode = GlobalUBO.mode;

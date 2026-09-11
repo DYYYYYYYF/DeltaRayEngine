@@ -185,6 +185,20 @@ bool MeshLoader::Import3DModelFile(const FString& model_file, const FString& out
 	// 去重几何体
 	DeduplicateGeometry(out_geometries);
 
+	// 顶点合并/共享之后再生成切线：
+	// 此时相邻面共用的顶点已被 DeduplicateVertices 合并为同一顶点，切线可跨面累积，
+	// 避免逐面独立切线导致法线贴图出现面状接缝。
+	for (FGeometryConfig& geo : out_geometries) {
+		if (geo.vertices == nullptr || geo.indices == nullptr) continue;
+		if (geo.vertex_count == 0 || geo.index_count == 0) continue;
+
+		GeometryUtils::GenerateTangents(
+			geo.vertex_count,
+			(Vertex*)geo.vertices,
+			geo.index_count,
+			(uint32_t*)geo.indices);
+	}
+
 	// 输出DSM文件
 	return WriteDsmFile(out_dsm_filename, model_file, out_geometries);
 }
