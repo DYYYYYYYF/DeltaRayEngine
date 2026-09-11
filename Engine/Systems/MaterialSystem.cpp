@@ -335,6 +335,9 @@ TextureUsage MaterialSystem::GetTextureUsageFromUniformName(const FString& name)
 	else if (name.Compare("skybox_texture") == 0) {
 		return TextureUsage::eTexture_Usage_Map_Cubemap;
 	}
+	else if (name.Compare("shadow_map_texture") == 0) {
+		return TextureUsage::eTexture_Usage_Map_Shadow;
+	}
 
 	return TextureUsage::eTexture_Usage_Unknown;
 }
@@ -360,8 +363,8 @@ bool MaterialSystem::ApplyGlobal(uint32_t shader_id, size_t renderer_frame_numbe
 		return true;
 	}
 
-	std::vector<ShaderUniform> uniforms = UsedShader->GetUniformList();
-	for (ShaderUniform& uniform : uniforms) {
+	const std::vector<ShaderUniform>& uniforms = UsedShader->GetUniformList();
+	for (const ShaderUniform& uniform : uniforms) {
 		if (uniform.scope != eShader_Scope_Global) continue;
 
 		switch (uniform.semantic)
@@ -388,6 +391,10 @@ bool MaterialSystem::ApplyGlobal(uint32_t shader_id, size_t renderer_frame_numbe
 
 		case ShaderSemantic::eShaderSemantic_RenderMode:
 			MATERIAL_APPLY_OR_FAIL(UsedShader->SetUniform(&uniform, &data.renderMode));
+			break;
+
+		case ShaderSemantic::eShaderSemantic_LightSpaceMatrix:
+			MATERIAL_APPLY_OR_FAIL(UsedShader->SetUniform(&uniform, &data.lightSpaceMatrix));
 			break;
 
 		default:
@@ -476,6 +483,15 @@ bool MaterialSystem::ApplyInstance(UMaterialInstance* mat, const FFrameData& dat
 		case ShaderSemantic::eSemantic_Skybox_Texture:
 			MATERIAL_APPLY_OR_FAIL(UsedShader->SetUniform(tex.uniform, &tex.texture));
 			break;
+
+		case ShaderSemantic::eSemantic_Shadow_Map:
+		{
+			// 阴影贴图由渲染流程逐帧提供；未提供时直接跳过，禁止回落到默认漫反射纹理
+			if (data.shadowMap) {
+				MATERIAL_APPLY_OR_FAIL(UsedShader->SetUniform(tex.uniform, data.shadowMap));
+			}
+		} break;
+
 		default:
 			GLOG(Log::Level::eError, "MaterialSystem::ApplyInstance() Unknow texture binding semantic.");
 			break;
@@ -487,22 +503,38 @@ bool MaterialSystem::ApplyInstance(UMaterialInstance* mat, const FFrameData& dat
 }
 
 bool MaterialSystem::ApplyLocal(UMaterialInstance* mat, const Matrix4& model) {
+	if (!mat) {
+		return false;
+	}
+
 	UMaterial* OriginMaterial = mat->GetParentMaterial();
 	if (!OriginMaterial) {
 		return false;
 	}
 	UShader* UsedShader = ShaderSystem::Get().GetByID(OriginMaterial->ShaderID);
+	if (!UsedShader) {
+		return false;
+	}
 
-	// 使用shader的本地uniform列表来设置模型矩阵
-	std::vector<ShaderUniform> uniforms = UsedShader->GetUniformList();
-	for (ShaderUniform& uniform : uniforms)
+	// 默认按材质父材质的 shader 应用 local uniform。
+	return ApplyLocal(UsedShader, model);
+}
+
+bool MaterialSystem::ApplyLocal(UShader* shader, const Matrix4& model) {
+	if (!shader) {
+		return false;
+	}
+
+	// 使用传入shader的本地uniform列表来设置模型矩阵
+	const std::vector<ShaderUniform>& uniforms = shader->GetUniformList();
+	for (const ShaderUniform& uniform : uniforms)
 	{
 		if (uniform.scope != eShader_Scope_Local) continue;
 
 		switch (uniform.semantic)
 		{
 		case ShaderSemantic::eShaderSemantic_Model_Matrix:
-			return UsedShader->SetUniform(&uniform, &model);
+			return shader->SetUniform(&uniform, &model);
 		}
 	}
 

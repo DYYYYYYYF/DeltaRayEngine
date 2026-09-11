@@ -320,6 +320,7 @@ ShaderSemantic ShaderLoader::ParseSemantic(const FString& semantic) {
 	if (semantic.Compare("view_position") == 0) return ShaderSemantic::eShaderSemantic_ViewPosition;
 	if (semantic.Compare("render_mode") == 0) return ShaderSemantic::eShaderSemantic_RenderMode;
 	if (semantic.Compare("time") == 0) return ShaderSemantic::eShaderSemantic_Time;
+	if (semantic.Compare("light_space_matrix") == 0) return ShaderSemantic::eShaderSemantic_LightSpaceMatrix;
 	if (semantic.Compare("model") == 0) return ShaderSemantic::eShaderSemantic_Model_Matrix;
 
 	if (semantic.Compare("gbuffer_albedo_texture") == 0) return ShaderSemantic::eSemantic_GBuffer_Albedo;
@@ -331,6 +332,7 @@ ShaderSemantic ShaderLoader::ParseSemantic(const FString& semantic) {
 	if (semantic.Compare("roughness_metallic_texture") == 0) return ShaderSemantic::eSemantic_Roughness_Metallic_Texture;
 
 	if (semantic.Compare("skybox_texture") == 0) return ShaderSemantic::eSemantic_Skybox_Texture;
+	if (semantic.Compare("shadow_map_texture") == 0) return ShaderSemantic::eSemantic_Shadow_Map;
 
 	return ShaderSemantic::eShaderSemantic_None;
 }

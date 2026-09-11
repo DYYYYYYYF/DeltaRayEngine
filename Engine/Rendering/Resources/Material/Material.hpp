@@ -27,6 +27,10 @@ public:
 	inline uint32_t GetInternalID() const { return InternalID; }
 	inline void SetInternalID(uint32_t ID) { InternalID = ID; }
 
+	// 父材质绑定的 shader 在 ShaderSystem 中的注册 ID（与 UShader::GetUniqueID() 同一套编号）。
+	// 用于判定 DrawCall 实际使用的 shader 是否与该材质匹配。
+	inline uint32_t GetShaderID() const { return ShaderID; }
+
 	inline size_t GetReferenceCount() const { return ReferenceCount; }
 	inline void IncreaseReferenceCount(uint32_t Count = 1) { ReferenceCount += Count; }
 	void DecreaseReferenceCount(uint32_t Count = 1);

@@ -4,6 +4,7 @@ layout (location = 0) in vec3 vPosition;
 layout (location = 1) in vec2 vTexcoord;
 
 layout (set = 0, binding = 0, std140) uniform GlobalUniformObject{
+    mat4 light_space_matrix;
     float global_time;
 }GlobalUBO;
 

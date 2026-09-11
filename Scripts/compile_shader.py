@@ -103,7 +103,8 @@ def LogCompileResult():
 if __name__ == '__main__':
     try:
         opts, args = getopt.getopt(sys.argv[1:], "hl:", ["help", "language="])
-        default_shader_language = "glsl"
+        # 默认与引擎运行时保持一致（Engine/Config.json 的 renderer.shader_language 当前为 hlsl）
+        default_shader_language = "hlsl"
         for opt, arg in opts:
             if opt in ("-h", "--help"):
                 print('-l [glsl/hlsl]: shader language')
@@ -113,11 +114,19 @@ if __name__ == '__main__':
 
         CompileShaders(default_shader_language)
 
-        # 保存JSON
+        # 保存JSON：引擎读取的是 Engine/Config.json 中嵌套的 renderer.shader_language
+        # （见 Engine/Systems/ShaderSystem.cpp 初始化时的 ReadString("renderer.shader_language")），
+        # 因此必须写回该嵌套位置，保持其他字段与结构不变。
         ConfigPath = os.path.abspath(".")+'/Engine/Config.json'
-        data = json.load(open(ConfigPath, 'r'))
-        data['ShaderLanguage'] = default_shader_language
-        json.dump(data, open(ConfigPath, 'w'))
+        with open(ConfigPath, 'r', encoding='utf-8') as ConfigFile:
+            data = json.load(ConfigFile)
+
+        if not isinstance(data.get('renderer'), dict):
+            data['renderer'] = {}
+        data['renderer']['shader_language'] = default_shader_language
+
+        with open(ConfigPath, 'w', encoding='utf-8') as ConfigFile:
+            json.dump(data, ConfigFile, indent=2, ensure_ascii=False)
 
     except getopt.GetoptError:
         print('compile_shader.py -l <language>')

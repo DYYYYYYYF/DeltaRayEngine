@@ -6,6 +6,7 @@
 #include "Containers/TArray.hpp"
 
 struct GBufferSet;
+struct FTextureMap;
 
 enum class EShaderLanguage {
 	eHLSL,
@@ -130,11 +131,15 @@ enum class ShaderSemantic {
 	eShaderSemantic_AmbientColor,
 	eShaderSemantic_Time,
 	eShaderSemantic_RenderMode,
+	eShaderSemantic_LightSpaceMatrix,
 
 	// Dynamic Instance
 	eSemantic_GBuffer_Albedo,
 	eSemantic_GBuffer_Normal,
 	eSemantic_GBuffer_Position,
+
+	// Shadow
+	eSemantic_Shadow_Map,
 
 	// PBR Texture
 	eSemantic_Diffuse_Texture,
@@ -186,6 +191,10 @@ struct FFrameData {
 	EShaderRenderMode renderMode;
 
 	GBufferSet* gBuffer;
+
+	// 阴影映射（Shadow Mapping）
+	Matrix4 lightSpaceMatrix;
+	FTextureMap* shadowMap = nullptr;
 };
 
 struct ShaderAttribute {

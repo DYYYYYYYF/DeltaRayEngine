@@ -55,7 +55,7 @@ bool VulkanTexture::LoadWriteable(){
 	vk::ImageAspectFlags Aspect;
 	vk::Format ImageFormat;
 	if (Flags & TextureFlagBits::eTexture_Flag_Depth) {
-		Usage = vk::ImageUsageFlagBits::eDepthStencilAttachment;
+		Usage = vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled;
 		Aspect = vk::ImageAspectFlagBits::eDepth;
 		ImageFormat = Context->Device.GetDepthFormat();
 	}
@@ -253,6 +253,9 @@ void VulkanTexture::Destroy() {
 void VulkanTexture::CreateImage(vk::Format format, vk::ImageTiling tiling,
 	vk::ImageUsageFlags usage, vk::MemoryPropertyFlags memory_flags, bool create_view, vk::ImageAspectFlags view_aspect_flags) {
 	MemoryFlags = memory_flags;
+
+	// 按视图的 aspect 自动判定该纹理被采样时的期望布局：深度/模板 -> eDepthStencilReadOnlyOptimal，其余 -> eShaderReadOnlyOptimal
+	ShaderReadLayout = (view_aspect_flags & vk::ImageAspectFlagBits::eDepth) ? vk::ImageLayout::eDepthStencilReadOnlyOptimal : vk::ImageLayout::eShaderReadOnlyOptimal;
 
 	vk::Device LogicalDevice = Context->Device.GetLogicalDevice();
 

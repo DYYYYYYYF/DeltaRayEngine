@@ -73,6 +73,9 @@ public:
 public:
 	VulkanContext* Context;
 
+	// 该纹理作为 shader 资源被采样时的期望布局：深度/模板纹理为 eDepthStencilReadOnlyOptimal，颜色纹理为 eShaderReadOnlyOptimal
+	vk::ImageLayout ShaderReadLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
 	vk::Image Image;
 	vk::DeviceMemory DeviceMemory;
 	vk::ImageView ImageView;

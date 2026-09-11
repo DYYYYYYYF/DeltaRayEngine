@@ -8,7 +8,8 @@ enum TextureUsage {
 	eTexture_Usage_Map_Specular = 0x02,
 	eTexture_Usage_Map_Normal = 0x03,
 	eTexture_Usage_Map_Cubemap = 0x04,
-	eTexture_Usage_Map_RoughnessMetallic = 0x05
+	eTexture_Usage_Map_RoughnessMetallic = 0x05,
+	eTexture_Usage_Map_Shadow = 0x06
 };
 
 enum TextureFilter {

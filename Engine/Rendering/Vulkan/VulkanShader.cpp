@@ -272,7 +272,7 @@ bool VulkanShader::ApplyGlobal() {
 		if (!VkTex) continue;
 
 		ImageInfos[ValidCount]
-			.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal)
+			.setImageLayout(VkTex->ShaderReadLayout)
 			.setImageView(VkTex->ImageView)
 			.setSampler(*reinterpret_cast<vk::Sampler*>(&Map->internal_data));
 		ValidCount++;
@@ -379,7 +379,7 @@ bool VulkanShader::ApplyInstance() {
 			if (!VkTex) continue;
 
 			ImageInfos[UpdateSamplerCount]
-				.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal)
+				.setImageLayout(VkTex->ShaderReadLayout)
 				.setImageView(VkTex->ImageView)
 				.setSampler(*reinterpret_cast<vk::Sampler*>(&Map->internal_data));
 			UpdateSamplerCount++;
@@ -425,7 +425,7 @@ bool VulkanShader::SetUniformByIndex(uint32_t index, const void* value) {
 	return SetUniform(Uniform, value);
 }
 
-bool VulkanShader::SetUniform(ShaderUniform* uniform, const void* value) {
+bool VulkanShader::SetUniform(const ShaderUniform* uniform, const void* value) {
 	// Sampler 走单独路径
 	if (uniform->type == eShader_Uniform_Type_Sampler) {
 		return SetSampler(uniform, static_cast<const FTextureMap*>(value));
@@ -488,7 +488,7 @@ bool VulkanShader::SetSamplerByIndex(uint32_t index, const FTextureMap* map) {
 	return SetSampler(Uniform, map);
 }
 
-bool VulkanShader::SetSampler(ShaderUniform* uniform, const FTextureMap* map){
+bool VulkanShader::SetSampler(const ShaderUniform* uniform, const FTextureMap* map){
 	if (uniform->scope == eShader_Scope_Global) {
 		if (uniform->location >= (uint32_t)GlobalTextureMaps.size()) {
 			GLOG(Log::eError, "SetSamplerByIndex — Global sampler location 越界。");

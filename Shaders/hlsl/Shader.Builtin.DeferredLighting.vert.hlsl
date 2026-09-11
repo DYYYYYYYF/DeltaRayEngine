@@ -3,6 +3,7 @@
 // 全局uniform对象 - 参考原始GLSL GlobalUniformObject
 struct GlobalUniformObject
 {
+    float4x4 light_space_matrix;
     float global_time;
 };
 

@@ -24,9 +24,11 @@ attribute=vec2,in_texcoord
 
 # Uniforms: type,scope,name
 # NOTE: For scope: 0=global, 1=instance, 2=local
+uniform=mat4,0,light_space_matrix
 uniform=float,0,time
 uniform=vec4,1,light_intensity
 uniform=u32,1,debug_mode
 uniform=samp,1,gbuffer_albedo_texture
 uniform=samp,1,gbuffer_normal_texture
 uniform=samp,1,gbuffer_position_texture
+uniform=samp,1,shadow_map_texture

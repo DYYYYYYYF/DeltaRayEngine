@@ -28,6 +28,23 @@
         "type": "Deferred",
         "passes": [
           {
+            "name": "Renderpass.Builtin.Shadow",
+            "clear_color": [1.0, 1.0, 1.0, 1.0],
+            "clear_flags": ["Depth"],
+            "depth": 1.0,
+            "stencil": 0,
+            "attachments": [
+              {
+                "type": "Depth",
+                "source": "View",
+                "load_op": "Clear",
+                "store_op": "Store",
+                "present_after": false,
+                "index": 0
+              }
+            ]
+          },
+          {
             "name": "Renderpass.Builtin.GBuffer",
             "clear_color": [0.0, 0.0, 0.0, 0.0],
             "clear_flags": ["Depth", "Stencil"],

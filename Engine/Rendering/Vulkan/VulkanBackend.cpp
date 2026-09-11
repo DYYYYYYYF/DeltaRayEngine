@@ -150,7 +150,6 @@ bool VulkanRHI::Initialize(const RenderBackendConfig* config, unsigned char* out
 	GLOG(Log::eInfo, "Validation layers enabled. Enumerating ...");
 	// List of validation layers required
 	RequiredValidationLayerName.push_back("VK_LAYER_KHRONOS_validation");
-	RequiredValidationLayerName.push_back("VK_LAYER_LUNARG_object_tracker");
 
 	// Obtain a list of available validation layers
 	uint32_t AvailableLayersCount = 0;
@@ -806,24 +805,44 @@ void VulkanRHI::ExecuteDrawCalls(const std::vector<DrawCall>& draw_calls,
 			}
 		}
 
-		// 绑定材质实例（Uniform等数据）
-		if (currentMaterialInstance != dc.material) {
-			if (!dc.material->IsNeedUpdate(frame_number)) continue;
-			if (!MaterialSystem::Get().ApplyInstance(dc.material, data)) {
-				GLOG(Log::eError, "VulkanRHI::ExecuteDrawCalls() Failed to apply instance material. Render frame failed.");
+		// 实例级资源（DescriptorSet / UBO）是按其"材质父材质的 shader"分配、并绑定到该 shader
+		// 的 pipeline layout 上的（见 MaterialSystem::ApplyInstance）。当 DrawCall 实际使用的
+		// shader 与材质父 shader 不一致时（例如阴影通道复用几何体材质实例、仅把 shader 换成
+		// Shader.Builtin.Shadow），绝不能按材质父 shader 去绑定实例资源：那会把别的 shader 的
+		// instance 描述符集绑到当前 pipeline layout 上（该 shader 甚至可能没有 set=1），同时也
+		// 会错误刷新材质帧号、干扰同一帧内其它通道的正常绑定。此类 DrawCall 只跳过实例资源绑定，
+		// local uniform（model 矩阵）仍按实际 shader 应用，DrawCall 本身照常绘制。
+		UMaterial* DCMaterial = dc.material->GetParentMaterial();
+		const bool ShaderMatchesMaterial = (DCMaterial != nullptr) && (DCMaterial->GetShaderID() == dc.shader->GetUniqueID());
+
+		if (!ShaderMatchesMaterial) {
+			if (!MaterialSystem::Get().ApplyLocal(dc.shader, dc.model)) {
+				GLOG(Log::eError, "VulkanRHI::ExecuteDrawCalls() Failed to apply local material. Render frame failed.");
+				continue;
+			}
+		}
+		else {
+			// 绑定材质实例（Uniform等数据）
+			if (currentMaterialInstance != dc.material) {
+				if (!dc.material->IsNeedUpdate(frame_number)) continue;
+				if (!MaterialSystem::Get().ApplyInstance(dc.material, data)) {
+					GLOG(Log::eError, "VulkanRHI::ExecuteDrawCalls() Failed to apply instance material. Render frame failed.");
+					continue;
+				}
+
+				currentMaterial = dc.material->GetParentMaterial();
+				currentMaterialInstance = dc.material;
+			}
+
+			// local uniform 一律按 DrawCall 实际使用的 shader 取，避免同帧内不同 shader 复用
+			// 同一材质实例时用错 uniform 列表。
+			if (!MaterialSystem::Get().ApplyLocal(dc.shader, dc.model)) {
+				GLOG(Log::eError, "VulkanRHI::ExecuteDrawCalls() Failed to apply local material. Render frame failed.");
 				continue;
 			}
 
-			currentMaterial = dc.material->GetParentMaterial();
-			currentMaterialInstance = dc.material;
+			dc.material->SetFrameNumber((uint32_t)frame_number);
 		}
-
-		if (!MaterialSystem::Get().ApplyLocal(dc.material, dc.model)) {
-			GLOG(Log::eError, "VulkanRHI::ExecuteDrawCalls() Failed to apply local material. Render frame failed.");
-			continue;
-		}
-			
-		dc.material->SetFrameNumber((uint32_t)frame_number);
 
 		// 真正Draw
 		GeometryRenderData renderData;

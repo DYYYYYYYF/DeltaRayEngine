@@ -1,9 +1,18 @@
 // DeferredLighting.frag.hlsl - 延迟光照片段着色器
 
+// 全局uniform对象 - 参考原始GLSL GlobalUniformObject
+struct GlobalUniformObject
+{
+    float4x4 light_space_matrix;
+    float global_time;
+};
+
 // 常量定义
 static const int SAMP_ALBEDO = 0;
 static const int SAMP_NORMAL = 1;
 static const int SAMP_POSITION = 2;
+static const int SAMP_SHADOW = 3;
+static const float SHADOW_BIAS = 0.0015;
 
 // 实例uniform对象 - 参考原始GLSL InstanceUniformObject
 struct InstanceUniformObject
@@ -44,9 +53,10 @@ struct PSOutput
 };
 
 // 资源绑定
+[[vk::binding(0, 0)]] ConstantBuffer<GlobalUniformObject> GlobalUBO;
 [[vk::binding(0, 1)]] ConstantBuffer<InstanceUniformObject> InstanceUBO;
-[[vk::binding(1, 1)]] Texture2D Samplers[];
-[[vk::binding(1, 1)]] SamplerState DefaultSampler[];
+[[vk::binding(1, 1)]] Texture2D Samplers[4];
+[[vk::binding(1, 1)]] SamplerState DefaultSampler[4];
 
 // 光源定义（与原World着色器保持一致）
 static DirectionalLight dir_light = 
@@ -170,6 +180,25 @@ float4 PBR(PointLight light, float3 norm, float3 albedo, float3 camPos, float3 f
     return float4(color, 1.0f) * InstanceUBO.light_intensity;
 }
 
+// 阴影计算(3x3 PCF)
+float CalculateShadow(float3 worldPosition, float3 worldNormal)
+{
+    float4 lightSpacePos = mul(GlobalUBO.light_space_matrix, float4(worldPosition, 1.0));
+    float3 proj = lightSpacePos.xyz / lightSpacePos.w;
+    proj = proj * 0.5 + 0.5;                       // NDC -> [0,1]
+    if (proj.z > 1.0 || proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0) return 0.0;
+    float bias = max(SHADOW_BIAS * (1.0 - dot(worldNormal, normalize(-dir_light.direction))), 0.0015);
+    float shadow = 0.0;
+    float2 texelSize = 1.0 / float2(2048.0, 2048.0);
+    for (int x = -1; x <= 1; ++x) {
+        for (int y = -1; y <= 1; ++y) {
+            float closest = Samplers[SAMP_SHADOW].Sample(DefaultSampler[SAMP_SHADOW], proj.xy + float2(x, y) * texelSize).r;
+            shadow += (proj.z - bias > closest) ? 1.0 : 0.0;
+        }
+    }
+    return shadow / 9.0;                            // 3x3 PCF
+}
+
 // 方向光计算
 float4 CalculateDirectionalLight(DirectionalLight light, float3 normal, float3 view_direction, float3 albedo, float metallic, float roughness, float4 ambient_color)
 {
@@ -233,6 +262,7 @@ PSOutput main(PSInput input)
     float3 worldPosition = positionDepth.rgb;
     float depth = positionDepth.a;
     
+
     // 早期深度测试 - 如果深度为0说明没有几何体
     if (depth == 0.0)
     {
@@ -268,8 +298,11 @@ PSOutput main(PSInput input)
         // PBR光照计算
         output.FragColor = PBR(point_light_0, worldNormal, albedo, input.view_position, worldPosition, metallic, roughness, 1.0);
         
+        // 方向光阴影(仅作用于方向光分量)
+        float shadow = CalculateShadow(worldPosition, worldNormal);
+        
         // 添加方向光
-        output.FragColor += CalculateDirectionalLight(dir_light, worldNormal, viewDirection, albedo, metallic, roughness, input.ambient_color);
+        output.FragColor += CalculateDirectionalLight(dir_light, worldNormal, viewDirection, albedo, metallic, roughness, input.ambient_color) * (1.0 - shadow);
         
         // 添加第二个点光源
         output.FragColor += CalculatePointLight(point_light_1, worldNormal, worldPosition, viewDirection, albedo, metallic, roughness, input.ambient_color);

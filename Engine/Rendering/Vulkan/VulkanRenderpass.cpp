@@ -172,8 +172,9 @@ bool VulkanRenderPass::Create(VulkanContext* context, const RenderpassConfig& co
 			// If loading, that means coming from another pass, meaning the format should be  vk::ImageLayout::eDepthStencilAttachmentOptimal.
 			AttachmentDesc.setInitialLayout(AttachmentConfig->loadOperation ==
 				RenderTargetAttachmentLoadOperation::eRender_Target_Attachment_Load_Operation_Load ? vk::ImageLayout::eDepthStencilAttachmentOptimal : vk::ImageLayout::eUndefined);
-			// Final layout for depth stencil attachments is always this.
-			AttachmentDesc.setFinalLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
+			// Final layout for depth stencil attachments: transition to read-only so the
+			// depth texture can be sampled by later passes (e.g. DeferredLighting reads ShadowMap).
+			AttachmentDesc.setFinalLayout(vk::ImageLayout::eDepthStencilReadOnlyOptimal);
 
 			// Push to co
 			DepthAttachmentDescriptions.push_back(AttachmentDesc);

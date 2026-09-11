@@ -319,9 +319,11 @@ public:
 	* @param top The top side of the view frustum.
 	* @param near_clip The near clipping plane distance.
 	* @param far_clip The far clipping plane distance.
+	* @param zero_to_one 为 true 时按 Vulkan/D3D 约定把 z 映射到 [0, 1]（近平面为 0、远平面为 1），
+	*        用于渲染目标/阴影贴图这类直接与光栅化深度比较的矩阵；默认 false 保持原 OpenGL 风格 [-1, 1]。
 	* @return A new orthographic projection matrix.
 	*/
-	static TMatrix4 Orthographic(float left, float right, float bottom, float top, float near_clip, float far_clip, bool reverse_y = false) {
+	static TMatrix4 Orthographic(float left, float right, float bottom, float top, float near_clip, float far_clip, bool reverse_y = false, bool zero_to_one = false) {
 		TMatrix4<T> Matrix = TMatrix4<T>::Identity();
 
 		float lr = 1.0f / (left - right);
@@ -330,11 +332,20 @@ public:
 
 		Matrix.data[0] = -2.0f * lr;
 		Matrix.data[5] = -2.0f * bt;
-		Matrix.data[10] = 2.0f * nf;
+
+		if (zero_to_one) {
+			// Vulkan 裁剪体 z ∈ [0, w]，OpenGL 风格的 2*nf / (far+near)*nf 会把近平面映射到 -1，
+			// 导致整个场景落在裁剪体之外（深度通道什么都写不进去，阴影贴图保持 clear 值）。
+			Matrix.data[10] = nf;                 // -1 / (far - near)
+			Matrix.data[14] = near_clip * nf;     // -near / (far - near)
+		}
+		else {
+			Matrix.data[10] = 2.0f * nf;
+			Matrix.data[14] = (far_clip + near_clip) * nf;
+		}
 
 		Matrix.data[12] = (left + right) * lr;
 		Matrix.data[13] = (top + bottom) * bt;
-		Matrix.data[14] = (far_clip + near_clip) * nf;
 
 		if (reverse_y) {
 			Matrix.data[5] *= -1.0f;

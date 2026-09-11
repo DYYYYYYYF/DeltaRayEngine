@@ -45,7 +45,7 @@ public:
 
 	/** 按名称写 uniform（内部转 index 后调用 SetUniformByIndex）*/
 	virtual bool SetUniform(const FString& name, const void* value) = 0;
-	virtual bool SetUniform(ShaderUniform* uniform, const void* value) = 0;
+	virtual bool SetUniform(const ShaderUniform* uniform, const void* value) = 0;
 	
 	virtual void ProcessAttributes(const std::vector<ShaderAttributeConfig>& attributes);
 	virtual void ProcessUniforms(const std::vector<ShaderUniformConfig>& uniforms);

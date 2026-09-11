@@ -2,6 +2,11 @@
 
 layout (location = 0) out vec4 FragColor;
 
+layout (set = 0, binding = 0, std140) uniform GlobalUniformObject{
+    mat4 light_space_matrix;
+    float global_time;
+}GlobalUBO;
+
 layout (set = 1, binding = 0) uniform InstanceUniformObject{
     vec4 light_intensity;
     int debug_mode;
@@ -10,7 +15,9 @@ layout (set = 1, binding = 0) uniform InstanceUniformObject{
 const int SAMP_ALBEDO = 0;
 const int SAMP_NORMAL = 1;
 const int SAMP_POSITION = 2;
-layout (set = 1, binding = 1) uniform sampler2D Samplers[3];
+const int SAMP_SHADOW = 3;
+const float SHADOW_BIAS = 0.005;
+layout (set = 1, binding = 1) uniform sampler2D Samplers[4];
 
 layout (location = 0) flat in float global_time;
 layout (location = 1) in struct dto{
@@ -56,6 +63,7 @@ PointLight point_light_1 = PointLight(
 
 // 函数声明
 vec4 CalculateDirectionalLight(DirectionalLight light, vec3 normal, vec3 view_direction, vec3 albedo, float metallic, float roughness);
+float CalculateShadow(vec3 worldPosition, vec3 worldNormal);
 vec4 CalculatePointLight(PointLight light, vec3 normal, vec3 frag_position, vec3 view_direction, vec3 albedo, float metallic, float roughness);
 vec4 PBR(PointLight light, vec3 norm, vec3 albedo, vec3 camPos, vec3 fragPos, float metallic, float roughness, float ao);
 
@@ -104,8 +112,11 @@ void main(){
         // PBR光照计算
         FragColor = PBR(point_light_0, worldNormal, albedo, in_dto.view_position, worldPosition, metallic, roughness, 1.0);
         
+        // 方向光阴影(仅作用于方向光分量)
+        float shadow = CalculateShadow(worldPosition, worldNormal);
+
         // 添加方向光
-        FragColor += CalculateDirectionalLight(dir_light, worldNormal, viewDirection, albedo, metallic, roughness);
+        FragColor += CalculateDirectionalLight(dir_light, worldNormal, viewDirection, albedo, metallic, roughness) * (1.0 - shadow);
 
         // 添加第二个点光源
         //FragColor += CalculatePointLight(point_light_1, worldNormal, worldPosition, viewDirection, albedo, metallic, roughness);
@@ -117,6 +128,23 @@ void main(){
         // 确保alpha为1
         FragColor.a = 1.0;
     }
+}
+
+float CalculateShadow(vec3 worldPosition, vec3 worldNormal){
+    vec4 lightSpacePos = GlobalUBO.light_space_matrix * vec4(worldPosition, 1.0);
+    vec3 proj = lightSpacePos.xyz / lightSpacePos.w;
+    proj = proj * 0.5 + 0.5;                       // NDC -> [0,1]
+    if (proj.z > 1.0 || proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0) return 0.0;
+    float bias = max(SHADOW_BIAS * (1.0 - dot(worldNormal, normalize(-dir_light.direction))), 0.0015);
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / vec2(2048.0);
+    for (int x = -1; x <= 1; ++x) {
+        for (int y = -1; y <= 1; ++y) {
+            float closest = texture(Samplers[SAMP_SHADOW], proj.xy + vec2(x, y) * texelSize).r;
+            shadow += (proj.z - bias > closest) ? 1.0 : 0.0;
+        }
+    }
+    return shadow / 9.0;                            // 3x3 PCF
 }
 
 vec4 CalculateDirectionalLight(DirectionalLight light, vec3 normal, vec3 view_direction, vec3 albedo, float metallic, float roughness){
