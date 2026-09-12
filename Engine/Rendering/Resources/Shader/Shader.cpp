@@ -5,7 +5,7 @@
 #include "../Texture/TextureType.hpp"
 #include "Systems/TextureSystem.h"
 
-std::vector<uint32_t> UShader::CompileShaderToSPV(const FString& filename, enum ShaderStage shaderStage, bool writeToDisk) {
+TArray<uint32_t> UShader::CompileShaderToSPV(const FString& filename, enum ShaderStage shaderStage, bool writeToDisk) {
 	size_t PrePathIndex = filename.IndexOf('/');
 	size_t SufPathIndex = filename.LastIndexOf('.');
 	FString PrePath = filename.SubStr(0, PrePathIndex);
@@ -25,7 +25,7 @@ std::vector<uint32_t> UShader::CompileShaderToSPV(const FString& filename, enum 
 		break;
 	default:
 		GLOG(Log::eError, "Unknown shader language flag.");
-		return std::vector<uint32_t>();
+		return TArray<uint32_t>();
 	}
 
 	shaderc_shader_kind scShadercStage;
@@ -45,7 +45,7 @@ std::vector<uint32_t> UShader::CompileShaderToSPV(const FString& filename, enum 
 		break;
 	default:
 		GLOG(Log::eError, "Unknown shader stage flag.");
-		return std::vector<uint32_t>();
+		return TArray<uint32_t>();
 	}
 
 	GLOG(Log::eInfo, "Compile shader file %s...", ShaderSourceFilename.CStr());
@@ -70,30 +70,33 @@ std::vector<uint32_t> UShader::CompileShaderToSPV(const FString& filename, enum 
 			Name.CStr(),
 			module.GetErrorMessage().c_str()
 		);
-		return std::vector<uint32_t>();
+		return TArray<uint32_t>();
 	}
 
-	std::vector<uint32_t> SPRIV = std::vector<uint32_t>(module.cbegin(), module.cend());
+	TArray<uint32_t> SPRIV;
+	for (auto It = module.cbegin(); It != module.cend(); ++It) {
+		SPRIV.Push(*It);
+	}
 
 	// 写入文件
-	if (writeToDisk && SPRIV.data()) {
+	if (writeToDisk && SPRIV.Data()) {
 		FString SPRIVFilePath = ResourceSystem::Get().GetRootPath() + FString("/Shaders") + SufPath + ".spv";
 		File OutFile(SPRIVFilePath);
-		OutFile.WriteBytes(reinterpret_cast<const char*>(SPRIV.data()), SPRIV.size() * sizeof(uint32_t), std::ios::trunc | std::ios::binary);
+		OutFile.WriteBytes(reinterpret_cast<const char*>(SPRIV.Data()), SPRIV.Size() * sizeof(uint32_t), std::ios::trunc | std::ios::binary);
 		GLOG(Log::eInfo, "Write shader file into %s...", SPRIVFilePath.CStr());
 	}
 
 	return SPRIV;
 }
 
-void UShader::ProcessAttributes(const std::vector<ShaderAttributeConfig>& attributes) {
-	for (uint32_t i = 0; i < attributes.size(); ++i) {
+void UShader::ProcessAttributes(const TArray<ShaderAttributeConfig>& attributes) {
+	for (uint32_t i = 0; i < attributes.Size(); ++i) {
 		AddAttribute(attributes[i]);
 	}
 }
 
-void UShader::ProcessUniforms(const std::vector<ShaderUniformConfig>& uniforms) {
-	for (uint32_t i = 0; i < uniforms.size(); ++i) {
+void UShader::ProcessUniforms(const TArray<ShaderUniformConfig>& uniforms) {
+	for (uint32_t i = 0; i < uniforms.Size(); ++i) {
 		if (uniforms[i].type == eShader_Uniform_Type_Sampler) {
 			AddSampler(uniforms[i]);
 		}
@@ -142,7 +145,7 @@ void UShader::AddAttribute(const ShaderAttributeConfig& config) {
 	Attrib.size = Size;
 	Attrib.type = config.type;
 
-	Attributes.push_back(Attrib);
+	Attributes.Push(Attrib);
 }
 
 void UShader::AddSampler(const ShaderUniformConfig& config) {
@@ -160,7 +163,7 @@ void UShader::AddSampler(const ShaderUniformConfig& config) {
 	// If global, push into the global list.
 	uint32_t Location = 0;
 	if (config.scope == eShader_Scope_Global) {
-		uint32_t GlobalTextureCount = (uint32_t)GlobalTextureMaps.size();
+		uint32_t GlobalTextureCount = (uint32_t)GlobalTextureMaps.Size();
 		Location = GlobalTextureCount;
 
 		// NOTE: Create a default texture map to be used here. Can always be updated later.
@@ -181,7 +184,7 @@ void UShader::AddSampler(const ShaderUniformConfig& config) {
 		FTextureMap* Map = (FTextureMap*)Memory::Allocate(sizeof(FTextureMap), MemoryType::eMemory_Type_Renderer);
 		*Map = DefaultMap;
 		Map->texture = TextureSystem::Get().GetDefaultDiffuseTexture();
-		GlobalTextureMaps.push_back(Map);
+		GlobalTextureMaps.Push(Map);
 	}
 	else {
 		// Otherwise, it's instance-level, so keep count of how many need to be added during the resource acquisition.
@@ -206,7 +209,7 @@ void UShader::AddUniform(const ShaderUniformConfig& config) {
 
 void UShader::AddUniform(const FString& uniform_name, uint32_t size, ShaderUniformType type, 
 	ShaderScope scope, ShaderSemantic semantic, uint32_t set_location, bool is_sampler){
-	uint16_t UniformCount = (uint16_t)Uniforms.size();
+	uint16_t UniformCount = (uint16_t)Uniforms.Size();
 	ShaderUniform Entry;
 	Entry.name = uniform_name;
 	Entry.index = UniformCount;
@@ -244,7 +247,7 @@ void UShader::AddUniform(const FString& uniform_name, uint32_t size, ShaderUnifo
 	}
 
 	HashMap[uniform_name] = (uint16_t)Entry.index;
-	Uniforms.push_back(Entry);
+	Uniforms.Push(Entry);
 
 	if (!is_sampler) {
 		if (Entry.scope == eShader_Scope_Global) {
@@ -262,15 +265,15 @@ uint32_t UShader::GetUniformIndex(const FString& name) const {
 		return INVALID_ID;
 	}
 
-	auto It = HashMap.find(name);
-	if (It == HashMap.end()) {
+	const uint32_t* It = HashMap.Find(name);
+	if (It == nullptr) {
 		GLOG(Log::eError, "Shader '%s' not found uniform '%s'.",
 			Name.CStr(), name.CStr());
 		return INVALID_ID;
 	}
 
-	uint32_t ArrayIndex = It->second;
-	if (ArrayIndex >= (uint32_t)Uniforms.size()) {
+	uint32_t ArrayIndex = *It;
+	if (ArrayIndex >= (uint32_t)Uniforms.Size()) {
 		return INVALID_ID;
 	}
 
@@ -284,15 +287,15 @@ ShaderUniform* UShader::GetUniformHandle(const FString& name) {
 		return nullptr;
 	}
 
-	auto It = HashMap.find(name);
-	if (It == HashMap.end()) {
+	uint32_t* It = HashMap.Find(name);
+	if (It == nullptr) {
 		GLOG(Log::eError, "Shader '%s' not found uniform '%s'.",
 			Name.CStr(), name.CStr());
 		return nullptr;
 	}
 
-	uint32_t ArrayIndex = It->second;
-	if (ArrayIndex >= (uint32_t)Uniforms.size()) {
+	uint32_t ArrayIndex = *It;
+	if (ArrayIndex >= (uint32_t)Uniforms.Size()) {
 		return nullptr;
 	}
 
@@ -306,8 +309,8 @@ bool UShader::IsUniformNameValid(const FString& uniform_name) {
 		return false;
 	}
 
-	auto it = HashMap.find(uniform_name);
-	if (it != HashMap.end()) {
+	uint32_t* it = HashMap.Find(uniform_name);
+	if (it != nullptr) {
 		GLOG(Log::eError, "A uniform by the name '%s' already exists on shader '%s'.", uniform_name.CStr(), Name.CStr());
 		return false;
 	}

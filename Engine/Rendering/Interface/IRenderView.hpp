@@ -38,7 +38,7 @@ struct RenderViewConfig {
 	RenderViewViewMatrixtSource view_matrix_source = RenderViewViewMatrixtSource::eRender_View_View_Matrix_Source_Scene_Camera;
 	RenderViewProjectionMatrixSource projection_matrix_source = RenderViewProjectionMatrixSource::eRender_View_Projection_Matrix_Source_Default_Perspective;
 	unsigned char pass_count = 0;
-	std::vector<struct RenderpassConfig> passes;
+	TArray<struct RenderpassConfig> passes;
 };
 
 class IRenderView {
@@ -55,7 +55,7 @@ public:
 	virtual void SetID(uint16_t id) { ID = id; }
 	virtual EShaderRenderMode GetRenderMode() const { return render_mode; }
 	virtual void SetRenderMode(EShaderRenderMode mode) { render_mode = mode; }
-	virtual std::vector<class VulkanRenderPass>& GetRenderpass() { return Passes; }
+	virtual TArray<class VulkanRenderPass>& GetRenderpass() { return Passes; }
 
 public:
 	uint16_t ID = INVALID_ID_U16;
@@ -64,7 +64,13 @@ public:
 	uint16_t Height = 1080;
 	ERenderViewType Type = ERenderViewType::Deferred;
 	unsigned char RenderpassCount = 0;
-	std::vector<class VulkanRenderPass> Passes;
+	TArray<class VulkanRenderPass> Passes;
+
+	// 正在重建的渲染目标索引：RenderViewSystem::RegenerateRendertargets 在调用
+	// RegenerateAttachmentTarget 之前写入当前渲染目标的下标，使视图能够为不同渲染目标
+	// 绑定各自的多缓冲资源（如按 swapchain 图像索引区分的 G-Buffer 套件、阴影贴图）。
+	// 默认 0，对不读取该字段的视图保持原有行为。
+	uint32_t RegeneratingTargetIndex = 0;
 	FString CustomShaderName;
 	EShaderRenderMode render_mode = EShaderRenderMode::eShader_Render_Mode_Default;
 
@@ -78,7 +84,7 @@ struct RenderViewPacket {
 	Vector4 ambient_color;
 	float global_time;
 	uint32_t geometry_count = 0;
-	std::vector<struct GeometryRenderData> geometries;
+	TArray<struct GeometryRenderData> geometries;
 	const char* custom_shader_name = nullptr;
 	IRenderviewPacketData* extended_data = nullptr;
 };

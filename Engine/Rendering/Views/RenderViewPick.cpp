@@ -54,21 +54,21 @@ static bool OnMouseMoved(eEventCode code, void* sender, void* listenerInst, SEve
 
 void RenderViewPick::AcquireShaderInstance() {
 	// UI Shader.
-	uint32_t Instance = Renderer->AcquireInstanceResource(UIShaderInfo.UsedShader, std::vector<FTextureMap*>());
+	uint32_t Instance = Renderer->AcquireInstanceResource(UIShaderInfo.UsedShader, TArray<FTextureMap*>());
 	if (Instance == INVALID_ID) {
 		GLOG(Log::eError, "Failed to acquire shader resource.");
 		return;
 	}
 
 	// World Shader.
-	Instance = Renderer->AcquireInstanceResource(WorldShaderInfo.UsedShader, std::vector<FTextureMap*>());
+	Instance = Renderer->AcquireInstanceResource(WorldShaderInfo.UsedShader, TArray<FTextureMap*>());
 	if (Instance == INVALID_ID) {
 		GLOG(Log::eError, "Failed to acquire shader resource.");
 		return;
 	}
 
 	InstanceCount++;
-	InstanceUpdated.push_back(false);
+	InstanceUpdated.Push(false);
 }
 
 void RenderViewPick::ReleaseShaderInstance() {
@@ -84,7 +84,7 @@ void RenderViewPick::ReleaseShaderInstance() {
 		}
 	}
 
-	InstanceUpdated.clear();
+	InstanceUpdated.Clear();
 }
 
 RenderViewPick::RenderViewPick(const RenderViewConfig& config, IRenderer* renderer) {
@@ -92,7 +92,7 @@ RenderViewPick::RenderViewPick(const RenderViewConfig& config, IRenderer* render
 	Name = config.name;
 	CustomShaderName = config.custom_shader_name;
 	RenderpassCount = config.pass_count;
-	Passes.resize(RenderpassCount);
+	Passes.Resize(RenderpassCount);
 	Renderer = renderer;
 }
 
@@ -255,7 +255,7 @@ bool RenderViewPick::RegenerateAttachmentTarget(uint32_t passIndex, RenderTarget
 //
 //	if (render_target_index == 0) {
 //		// Reset.
-//		size_t Count = InstanceUpdated.size();
+//		size_t Count = InstanceUpdated.Size();
 //		for (uint32_t i = 0; i < Count; ++i) {
 //			InstanceUpdated[i] = false;
 //		}

@@ -11,6 +11,7 @@
 #include "Systems/MaterialSystem.h"
 #include "Systems/ShaderSystem.h"
 #include "Systems/CameraSystem.h"
+#include "Systems/LightSystem.h"
 #include "Systems/ResourceSystem.h"
 #include "Systems/RenderViewSystem.hpp"
 #include "Systems/TextureSystem.h"
@@ -21,6 +22,7 @@
 #include "Rendering/Interface/IRendererBackend.hpp"
 
 #include "Framework/Components/CameraComponent.h"
+#include "Framework/Components/DirectionalLightComponent.h"
 #include "Rendering/RenderWorld/RenderProxy.h"
 
 static bool RenderViewWorldDeferredOnEvent(eEventCode code, void* sender, void* listenerInst, SEventContext context) {
@@ -72,7 +74,7 @@ RenderViewWorldDeferred::RenderViewWorldDeferred(const RenderViewConfig& config)
 	Name = config.name;
 	CustomShaderName = config.custom_shader_name;
 	RenderpassCount = config.pass_count; // 3个通道：0=阴影(深度预通道)、1=G-Buffer、2=延迟光照
-	Passes.resize(RenderpassCount);
+	Passes.Resize(RenderpassCount);
 	FullscreenQuad = nullptr;
 	Renderer = IRenderer::GetRenderer();
 }
@@ -139,8 +141,8 @@ bool RenderViewWorldDeferred::OnCreate(const RenderViewConfig& config) {
 	ProjectionMatrix = Matrix4::Perspective(Fov, (float)config.width / config.height, NearClip, FarClip);
 	WorldCamera = CameraSystem::Get().GetMainCamera();
 
-	// 环境光设置 (与原World渲染保持一致)
-	AmbientColor = Vector4(0.7f, 0.7f, 0.7f, 1.0f);
+	// 环境光与方向光参数统一由场景中的方向光 Actor 提供，
+	// 每次计算光空间矩阵时从 LightSystem 刷新（见 UpdateLightSpaceMatrix）
 
 	// 创建G-Buffer纹理
 	if (!CreateGBufferTextures(config.width, config.height)) {
@@ -202,23 +204,24 @@ void RenderViewWorldDeferred::OnResize(uint32_t width, uint32_t height) {
 		}
 
 		// 更新所有渲染目标的纹理引用
-		for (uint32_t targetIndex = 0; targetIndex < Passes[i].Targets.size(); ++targetIndex) {
+		for (uint32_t targetIndex = 0; targetIndex < Passes[i].Targets.Size(); ++targetIndex) {
 			RenderTarget* target = &Passes[i].Targets[targetIndex];
 
 			if (i == 0) {
-				// 阴影通道：深度附件指向阴影贴图（分辨率固定，重建渲染目标时保持引用正确）
-				for (uint32_t attachIndex = 0; attachIndex < target->attachments.size(); ++attachIndex) {
+				// 阴影通道：深度附件指向该渲染目标对应的阴影贴图（分辨率固定，重建渲染目标时保持引用正确）
+				UTexture* ShadowMap = ShadowMapTextures[targetIndex % MAX_RENDER_TARGETS];
+				for (uint32_t attachIndex = 0; attachIndex < target->attachments.Size(); ++attachIndex) {
 					RenderTargetAttachment* attachment = &target->attachments[attachIndex];
 
 					if (attachment->type == RenderTargetAttachmentType::eRender_Target_Attachment_Type_Depth) {
-						attachment->texture = ShadowMapTexture;
+						attachment->texture = ShadowMap;
 					}
 				}
 			}
 			else if (i == 1) {
 				// 更新G-Buffer纹理引用
 				uint32_t bufferIndex = targetIndex % MAX_RENDER_TARGETS;
-				for (uint32_t attachIndex = 0; attachIndex < target->attachments.size(); ++attachIndex) {
+				for (uint32_t attachIndex = 0; attachIndex < target->attachments.Size(); ++attachIndex) {
 					RenderTargetAttachment* attachment = &target->attachments[attachIndex];
 
 					if (attachment->type == RenderTargetAttachmentType::eRender_Target_Attachment_Type_Color) {
@@ -248,11 +251,14 @@ bool RenderViewWorldDeferred::RegenerateAttachmentTarget(uint32_t passIndex, Ren
 	if (passIndex == 0) {
 		// 阴影通道 (pass 0) - 仅深度附件，使用 SHADOW_MAP_SIZE x SHADOW_MAP_SIZE 阴影贴图
 		if (attachment->type & eRender_Target_Attachment_Type_Depth) {
-			if (ShadowMapTexture == nullptr) {
+			// 每个渲染目标绑定各自的那份阴影贴图（按 targets 下标取模），实现帧间隔离；
+			// 渲染期阴影通道与光照采样端使用同一取模规则定位贴图，保证写入与读取一致。
+			UTexture* ShadowMap = ShadowMapTextures[RegeneratingTargetIndex % MAX_RENDER_TARGETS];
+			if (ShadowMap == nullptr) {
 				GLOG(Log::eError, "Shadow: Shadow map texture is not ready.");
 				return false;
 			}
-			attachment->texture = ShadowMapTexture;
+			attachment->texture = ShadowMap;
 		}
 		else {
 			GLOG(Log::eError, "Shadow: Unsupported attachment type %d", attachment->type);
@@ -261,10 +267,13 @@ bool RenderViewWorldDeferred::RegenerateAttachmentTarget(uint32_t passIndex, Ren
 	}
 	else if (passIndex == 1) {
 		// G-Buffer通道 - 多个渲染目标
+		// 按当前重建的渲染目标索引选取对应的 G-Buffer 套件，使每个 swapchain 图像写各自的
+		// 反照率/法线/位置/深度纹理；此前固定取第 0 套会让在飞的多个帧共用同一批资源，
+		// 与 MaxFramesInFlight>1 叠加后产生帧间覆写竞争。
+		const uint32_t bufferIndex = RegeneratingTargetIndex % MAX_RENDER_TARGETS;
+
 		if (attachment->type & eRender_Target_Attachment_Type_Color) {
 			// 根据attachment的索引来决定使用哪个G-Buffer纹理
-			uint32_t bufferIndex = 0; // 默认使用第一个缓冲，实际应该根据当前渲染目标索引确定
-
 			switch (attachment->index) {
 			case 0:
 				attachment->texture = GBuffers[bufferIndex].AlbedoTexture;
@@ -280,7 +289,6 @@ bool RenderViewWorldDeferred::RegenerateAttachmentTarget(uint32_t passIndex, Ren
 			}
 		}
 		else if (attachment->type & eRender_Target_Attachment_Type_Depth) {
-			uint32_t bufferIndex = 0; // 默认使用第一个缓冲
 			attachment->texture = GBuffers[bufferIndex].DepthTexture;
 		}
 		else {
@@ -310,14 +318,14 @@ bool RenderViewWorldDeferred::RegenerateAttachmentTarget(uint32_t passIndex, Ren
  * 当 Targets 为空或该索引越界时回退到索引 0 并记录日志，避免 &Targets[index] 越界访问。
  */
 static RenderTarget* AcquirePassTarget(IRenderpass* pass, uint8_t preferredIndex, const char* passName) {
-	if (pass == nullptr || pass->Targets.empty()) {
+	if (pass == nullptr || pass->Targets.IsEmpty()) {
 		GLOG(Log::eError, "%s: render target list is empty.", passName);
 		return nullptr;
 	}
 
-	if ((size_t)preferredIndex >= pass->Targets.size()) {
+	if ((size_t)preferredIndex >= pass->Targets.Size()) {
 		GLOG(Log::eWarn, "%s: preferred target index %u is out of range (target count = %zu), fallback to index 0.",
-			passName, (uint32_t)preferredIndex, pass->Targets.size());
+			passName, (uint32_t)preferredIndex, pass->Targets.Size());
 		return &pass->Targets[0];
 	}
 
@@ -336,18 +344,18 @@ void RenderViewWorldDeferred::Render(const TArray<FRenderProxy*>& RenderProxies)
 	// 逐帧刷新光空间矩阵（阴影通道与延迟光照通道都依赖它）
 	UpdateLightSpaceMatrix();
 
-	// 获取当前帧的 GBuffer 纹理组
-	GBufferSet* CurrentGBuffer = GetCurrentGBufferSet(0);
+	// 注意：本帧要用的 G-Buffer 套件、阴影贴图下标都要等下面拿到窗口附件索引（RTIndex）后才能确定（见阶段二），
+	// 此处不再固定取第 0 套，避免"光照采样读到的 G-Buffer"与"G-Buffer 通道实际写入的套件"错位。
 
 	// 阶段一：DRAWCALL 生成、收集与状态排序
 	// 复用成员容器，避免逐帧堆分配；每帧先整体清空，杜绝跨帧残留与跨通道串数据
-	GBufferDrawCalls.clear();
-	ShadowDrawCalls.clear();
-	LightingDrawCalls.clear();
+	GBufferDrawCalls.Clear();
+	ShadowDrawCalls.Clear();
+	LightingDrawCalls.Clear();
 
 	// 仅做容量提示（不改变元素数量），push_back 仍会按需增长
-	GBufferDrawCalls.reserve(RenderProxies.Size());
-	LightingDrawCalls.reserve(1);
+	GBufferDrawCalls.Reserve(RenderProxies.Size());
+	LightingDrawCalls.Reserve(1);
 
 	// --- 收集 GBuffer 几何体的 DrawCall ---
 	for (uint32_t i = 0; i < RenderProxies.Size(); ++i) {
@@ -366,12 +374,12 @@ void RenderViewWorldDeferred::Render(const TArray<FRenderProxy*>& RenderProxies)
 			dc.shader = GBufferShader;
 			dc.userData = nullptr;
 			dc.sortKey = ((uint64_t)dc.shader->ID << 32) | (uint64_t)Mat->GetInternalID();
-			GBufferDrawCalls.push_back(dc);
+			GBufferDrawCalls.Push(dc);
 		}
 	}
 
 	// 状态排序
-	std::sort(GBufferDrawCalls.begin(), GBufferDrawCalls.end(), [](const DrawCall& a, const DrawCall& b) {
+	GBufferDrawCalls.Sort([](const DrawCall& a, const DrawCall& b) {
 		return a.sortKey < b.sortKey;
 		});
 
@@ -381,16 +389,16 @@ void RenderViewWorldDeferred::Render(const TArray<FRenderProxy*>& RenderProxies)
 	}
 
 	// --- 收集 阴影通道 的 DrawCall：几何体/材质与 G-Buffer 完全一致，仅把 shader 换成阴影着色器 ---
-	ShadowDrawCalls.reserve(GBufferDrawCalls.size());
+	ShadowDrawCalls.Reserve(GBufferDrawCalls.Size());
 	for (const DrawCall& GBufferDC : GBufferDrawCalls) {
 		DrawCall ShadowDC = GBufferDC;
 		ShadowDC.shader = ShadowShader;
 		ShadowDC.sortKey = ((uint64_t)ShadowDC.shader->ID << 32) | (uint64_t)ShadowDC.material->GetInternalID();
-		ShadowDrawCalls.push_back(ShadowDC);
+		ShadowDrawCalls.Push(ShadowDC);
 	}
 
 	// 状态排序
-	std::sort(ShadowDrawCalls.begin(), ShadowDrawCalls.end(), [](const DrawCall& a, const DrawCall& b) {
+	ShadowDrawCalls.Sort([](const DrawCall& a, const DrawCall& b) {
 		return a.sortKey < b.sortKey;
 		});
 
@@ -401,15 +409,27 @@ void RenderViewWorldDeferred::Render(const TArray<FRenderProxy*>& RenderProxies)
 	LightingDC.model = Matrix4::Identity();
 	LightingDC.material = DeferredLightingMat;
 	LightingDC.shader = LightingShader;
-	LightingDC.userData = CurrentGBuffer;
+	// 此处（阶段一）尚未确定本帧的多缓冲下标，先置空占位，待阶段二算出 BufferIndex 后回填
+	LightingDC.userData = nullptr;
 	LightingDC.sortKey = ((uint64_t)LightingDC.shader->ID << 32) | (uint64_t)DeferredLightingMat->GetInternalID();
 
-	LightingDrawCalls.push_back(LightingDC);
+	LightingDrawCalls.Push(LightingDC);
 
 
 	// 阶段二：逐帧不变量（窗口附件索引 + 帧号）
 	uint8_t RTIndex = Renderer->GetWindowAttachmentIndex();
 	uint64_t FrameNumber = Renderer->GetFrameNum();
+
+	// 本帧使用的多缓冲资源下标：G-Buffer 套件与阴影贴图共用同一取模规则，
+	// 与 RegenerateAttachmentTarget 里渲染目标的附件绑定规则（targets 下标 % MAX_RENDER_TARGETS）保持一致。
+	// RTIndex 必然小于渲染目标数量，因此该下标一定落在有效范围内，不会触发回退。
+	const uint32_t BufferIndex = (uint32_t)RTIndex % MAX_RENDER_TARGETS;
+	GBufferSet* CurrentGBuffer = GetCurrentGBufferSet(BufferIndex);
+
+	// DrawCall 收集（阶段一）早于本阶段，此处回填延迟光照通道需要采样的 G-Buffer 套件
+	if (!LightingDrawCalls.IsEmpty()) {
+		LightingDrawCalls[0].userData = CurrentGBuffer;
+	}
 
 	// 三个通道共用同一帧号：阴影通道的 DrawCall 其实际 shader 与材质父 shader 不一致
 	// （dc.shader 为 Shader.Builtin.Shadow），后端 ExecuteDrawCalls 对这类 DrawCall 会跳过
@@ -418,10 +438,10 @@ void RenderViewWorldDeferred::Render(const TArray<FRenderProxy*>& RenderProxies)
 	const uint64_t SharedFrameNumber = FrameNumber;
 
 	// 阶段三：第 0 通道 —— 阴影深度通道（先于 G-Buffer 通道执行，产出阴影贴图）
-	// 阴影通道的附件 source=View，所有 target 都绑定同一张阴影贴图，与 swapchain 图像索引无关，
-	// 因此固定使用 Targets[0]（不跟随 RTIndex），并做长度校验防止越界。
+	// 阴影通道的附件 source=View，但每个渲染目标绑定的是各自那份阴影贴图（见 RegenerateAttachmentTarget），
+	// 因此这里用与附件绑定完全相同的取模下标选 target，保证「本帧写入的贴图」与「本帧延迟光照采样的贴图」一致。
 	IRenderpass* ShadowPass = (IRenderpass*)&Passes[0];
-	RenderTarget* ShadowTarget = AcquirePassTarget(ShadowPass, 0, "Shadow");
+	RenderTarget* ShadowTarget = AcquirePassTarget(ShadowPass, (uint8_t)BufferIndex, "Shadow");
 	if (ShadowTarget == nullptr) {
 		GLOG(Log::eError, "Shadow pass has no valid render target, shadow pass skipped.");
 		return;
@@ -458,9 +478,12 @@ void RenderViewWorldDeferred::Render(const TArray<FRenderProxy*>& RenderProxies)
 	GBufferData.renderMode = render_mode;
 	GBufferData.time = 0.0f;
 	GBufferData.lightSpaceMatrix = LightSpaceMatrix;
+	// 环境光同样来自光照 Actor（GBuffer 着色器按 ambient_color 语义接收）
+	GBufferData.ambieantColor = AmbientColor;
 
-	// G-Buffer 通道含 source=Default 的深度附件（按 swapchain 图像索引绑定），必须使用 RTIndex
-	RenderTarget* GBufferTarget = AcquirePassTarget(GBufferPass, RTIndex, "GBuffer");
+	// G-Buffer 通道的颜色与深度附件均为 source=View、按渲染目标索引绑定到对应的 G-Buffer 套件，
+	// 因此这里使用与 CurrentGBuffer 相同的取模下标，确保"写入的套件"就是"光照要采样的套件"
+	RenderTarget* GBufferTarget = AcquirePassTarget(GBufferPass, (uint8_t)BufferIndex, "GBuffer");
 	if (GBufferTarget == nullptr) {
 		GLOG(Log::eError, "G-Buffer pass has no valid render target, G-Buffer pass skipped.");
 		return;
@@ -478,7 +501,17 @@ void RenderViewWorldDeferred::Render(const TArray<FRenderProxy*>& RenderProxies)
 	LightingData.time = 0.0f;
 	LightingData.gBuffer = CurrentGBuffer;
 	LightingData.lightSpaceMatrix = LightSpaceMatrix;
-	LightingData.shadowMap = &ShadowMapTextureMap;
+	// 采样本帧阴影通道写入的那份贴图（与 RenderTarget 附件绑定的取模下标同源）
+	LightingData.shadowMap = &ShadowMapTextureMaps[BufferIndex];
+
+	// 方向光参数：全部来自光照 Actor，经全局 Uniform 上传 GPU，
+	// 着色器不再使用任何硬编码的光照方向/颜色/强度/阴影偏置常量
+	LightingData.ambieantColor = AmbientColor;
+	LightingData.lightDirection = Vector4(LightDirection.x, LightDirection.y, LightDirection.z, 0.0f);
+	LightingData.lightColor = LightColor;
+	LightingData.lightIntensity = LightIntensity;
+	LightingData.shadowBias = ShadowBias;
+	LightingData.shadowStrength = ShadowStrength;
 
 	// 延迟光照通道输出到 source=Default 的窗口颜色附件，必须使用 RTIndex 与 swapchain 图像对齐
 	RenderTarget* LightingTarget = AcquirePassTarget(LightingPass, RTIndex, "DeferredLighting");
@@ -513,9 +546,10 @@ bool RenderViewWorldDeferred::CreateGBufferTextures(uint32_t width, uint32_t hei
 		GBuffers[bufferIndex].PositionTextureMap.texture = GBuffers[bufferIndex].PositionTexture;
 		Renderer->AcquireTextureMap(&GBuffers[bufferIndex].PositionTextureMap);
 
-		// 创建深度纹理
+		// 创建深度纹理（必须显式传 has_depth=true：否则会按 1 通道颜色格式创建，
+		// 与它作为深度附件时的深度格式不匹配，深度写入与深度测试行为未定义）
 		FString DepthTextureName("GBuffer_Depth_%d", bufferIndex);
-		GBuffers[bufferIndex].DepthTexture = TextureSystemInst.AcquireWriteable(DepthTextureName.CStr(), width, height, 1, false);
+		GBuffers[bufferIndex].DepthTexture = TextureSystemInst.AcquireWriteable(DepthTextureName.CStr(), width, height, 1, false, true);
 		GBuffers[bufferIndex].DepthTextureMap.texture = GBuffers[bufferIndex].DepthTexture;
 		Renderer->AcquireTextureMap(&GBuffers[bufferIndex].DepthTextureMap);
 	}
@@ -541,22 +575,30 @@ void RenderViewWorldDeferred::DestroyGBufferTextures() {
 bool RenderViewWorldDeferred::CreateShadowResources() {
 	TextureSystem& TextureSystemInst = TextureSystem::Get();
 
-	// 阴影贴图：SHADOW_MAP_SIZE x SHADOW_MAP_SIZE 深度语义纹理（分辨率固定，不随窗口变化）
-	// 参数参照 CreateGBufferTextures 的深度纹理写法（1 通道、无透明），并显式打开深度标志
-	ShadowMapTexture = TextureSystemInst.AcquireWriteable("ShadowMap", SHADOW_MAP_SIZE, SHADOW_MAP_SIZE, 1, false, true);
-	if (ShadowMapTexture == nullptr) {
-		GLOG(Log::eError, "CreateShadowResources: Failed to acquire shadow map texture.");
-		return false;
-	}
+	// 阴影贴图：每个渲染目标各一份 SHADOW_MAP_SIZE x SHADOW_MAP_SIZE 深度语义纹理
+	// （分辨率固定，不随窗口变化）。参数参照 CreateGBufferTextures 的深度纹理写法
+	// （1 通道、无透明），并显式打开深度标志。
+	// 每个渲染目标各持一份的原因：MaxFramesInFlight > 1 时多个帧同时在飞，单张贴图会被后续帧的
+	// 阴影通道覆写，而前一帧的延迟光照通道可能仍在采样它，造成帧间竞争与阴影闪烁。
+	for (uint32_t bufferIndex = 0; bufferIndex < MAX_RENDER_TARGETS; ++bufferIndex) {
+		FString ShadowMapName("ShadowMap_%d", bufferIndex);
+		ShadowMapTextures[bufferIndex] = TextureSystemInst.AcquireWriteable(ShadowMapName.CStr(), SHADOW_MAP_SIZE, SHADOW_MAP_SIZE, 1, false, true);
+		if (ShadowMapTextures[bufferIndex] == nullptr) {
+			GLOG(Log::eError, "CreateShadowResources: Failed to acquire shadow map texture %d.", bufferIndex);
+			DestroyShadowResources();
+			return false;
+		}
 
-	ShadowMapTextureMap.texture = ShadowMapTexture;
-	if (!Renderer->AcquireTextureMap(&ShadowMapTextureMap)) {
-		// 回滚：注册 TextureMap 失败时销毁刚创建的纹理并清空两侧指针，不残留悬空引用
-		GLOG(Log::eError, "CreateShadowResources: Failed to acquire shadow map texture map.");
-		ShadowMapTexture->Destroy();
-		ShadowMapTexture = nullptr;
-		ShadowMapTextureMap.texture = nullptr;
-		return false;
+		ShadowMapTextureMaps[bufferIndex].texture = ShadowMapTextures[bufferIndex];
+		if (!Renderer->AcquireTextureMap(&ShadowMapTextureMaps[bufferIndex])) {
+			// 回滚：注册 TextureMap 失败时销毁刚创建的纹理并清空两侧指针，不残留悬空引用
+			GLOG(Log::eError, "CreateShadowResources: Failed to acquire shadow map texture map %d.", bufferIndex);
+			ShadowMapTextures[bufferIndex]->Destroy();
+			ShadowMapTextures[bufferIndex] = nullptr;
+			ShadowMapTextureMaps[bufferIndex].texture = nullptr;
+			DestroyShadowResources();
+			return false;
+		}
 	}
 
 	// 阴影贴图分辨率固定、不随窗口变化，光空间矩阵也仅与光源参数有关，创建时计算一次即可
@@ -568,32 +610,66 @@ void RenderViewWorldDeferred::DestroyShadowResources() {
 	// 幂等：可安全重复调用，空指针安全。
 	// 纹理与 TextureMap 都在释放后置空，二次调用既不会重复销毁纹理，
 	// 也不会对从未成功注册（或已释放）的 TextureMap 重复释放采样器。
-	if (ShadowMapTexture) {
-		ShadowMapTexture->Destroy();
-		ShadowMapTexture = nullptr;
-	}
+	for (uint32_t bufferIndex = 0; bufferIndex < MAX_RENDER_TARGETS; ++bufferIndex) {
+		if (ShadowMapTextures[bufferIndex]) {
+			ShadowMapTextures[bufferIndex]->Destroy();
+			ShadowMapTextures[bufferIndex] = nullptr;
+		}
 
-	// 仅当 TextureMap 仍绑定纹理（即已成功 AcquireTextureMap）时才释放，避免空注册释放
-	if (Renderer && ShadowMapTextureMap.texture) {
-		Renderer->ReleaseTextureMap(&ShadowMapTextureMap);
+		// 仅当 TextureMap 仍绑定纹理（即已成功 AcquireTextureMap）时才释放，避免空注册释放
+		if (Renderer && ShadowMapTextureMaps[bufferIndex].texture) {
+			Renderer->ReleaseTextureMap(&ShadowMapTextureMaps[bufferIndex]);
+		}
+		ShadowMapTextureMaps[bufferIndex].texture = nullptr;
 	}
-	ShadowMapTextureMap.texture = nullptr;
 }
 
 void RenderViewWorldDeferred::UpdateLightSpaceMatrix() {
-	// 方向光：归一化的光照方向（与延迟光照使用的光照方向保持一致）
-	LightDirection = Vector3(SHADOW_LIGHT_DIR_X, SHADOW_LIGHT_DIR_Y, SHADOW_LIGHT_DIR_Z).Normalized();
+	// 光照参数唯一来源：场景中的方向光 Actor（UDirectionalLightComponent）。
+	// 未放置光源 Actor 时使用与组件一致的默认值，保证渲染结果与改造前相同。
+	Vector3 Direction = Vector3(-0.57735f, -0.57735f, -0.57735f).Normalized();
+	Vector4 Color = Vector4(0.8f, 0.8f, 0.8f, 1.0f);
+	float Intensity = 1.0f;
+	Vector4 Ambient = Vector4(0.18f, 0.18f, 0.18f, 1.0f);
+	float Bias = 0.005f;
+	float Strength = 1.0f;
+	float Distance = 40.0f;
+	float HalfExtent = 20.0f;
+	float OrthoNear = 0.1f;
+	float OrthoFar = 100.0f;
+
+	UDirectionalLightComponent* MainLight = LightSystem::Get().GetMainLight();
+	if (MainLight) {
+		Direction = MainLight->GetDirection();
+		Color = MainLight->GetColor();
+		Intensity = MainLight->GetIntensity();
+		Ambient = MainLight->GetAmbientColor();
+		Bias = MainLight->GetShadowBias();
+		Strength = MainLight->GetShadowStrength();
+		Distance = MainLight->GetShadowDistance();
+		HalfExtent = MainLight->GetShadowOrthoExtent();
+		OrthoNear = MainLight->GetShadowOrthoNear();
+		OrthoFar = MainLight->GetShadowOrthoFar();
+	}
+
+	// 逐帧刷新供 GPU 上传的帧数据（Render() 中写入 FFrameData）
+	LightDirection = Direction;
+	LightColor = Color;
+	LightIntensity = Vector4(Intensity, Intensity, Intensity, Intensity);
+	AmbientColor = Ambient;
+	ShadowBias = Bias;
+	ShadowStrength = Strength;
 
 	// 光源位置：沿光照方向的反方向拉远，保证正交相机能覆盖场景
-	Vector3 LightPosition = -LightDirection * SHADOW_LIGHT_DISTANCE;
+	Vector3 LightPosition = -LightDirection * Distance;
 
 	// 光空间矩阵 = 正交投影 * 光源视图矩阵
 	// 最后一个参数 zero_to_one = true：阴影贴图是直接与光栅化深度比较的渲染目标，
 	// 必须让近/远平面映射到深度 0/1（Vulkan 裁剪体约定），否则场景整体落在裁剪体之外。
 	Matrix4 LightProjection = Matrix4::Orthographic(
-		-SHADOW_ORTHO_HALF_EXTENT, SHADOW_ORTHO_HALF_EXTENT,
-		-SHADOW_ORTHO_HALF_EXTENT, SHADOW_ORTHO_HALF_EXTENT,
-		SHADOW_ORTHO_NEAR, SHADOW_ORTHO_FAR, false, true);
+		-HalfExtent, HalfExtent,
+		-HalfExtent, HalfExtent,
+		OrthoNear, OrthoFar, false, true);
 	Matrix4 LightView = Matrix4::LookAt(LightPosition, Vector3(0.0f, 0.0f, 0.0f), Vector3(0.0f, 1.0f, 0.0f));
 	LightSpaceMatrix = LightProjection * LightView;
 }

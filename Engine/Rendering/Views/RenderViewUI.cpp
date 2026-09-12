@@ -39,7 +39,7 @@ RenderViewUI::RenderViewUI(const RenderViewConfig& config) {
 	Name = config.name;
 	CustomShaderName = config.custom_shader_name;
 	RenderpassCount = config.pass_count;
-	Passes.resize(RenderpassCount);
+	Passes.Resize(RenderpassCount);
 	Renderer = IRenderer::GetRenderer();
 }
 
@@ -106,7 +106,7 @@ bool RenderViewUI::RegenerateAttachmentTarget(uint32_t passIndex, RenderTargetAt
 }
 
 void RenderViewUI::Render(const TArray<FRenderProxy*>& RenderObejcts) {
-	std::vector<DrawCall> UIDrawCalls;
+	TArray<DrawCall> UIDrawCalls;
 	// UI draw calls.
 	for (FRenderProxy* RenderProxy : RenderObejcts) {
 		FTextRenderProxy* Proxy = Cast<FTextRenderProxy*>(RenderProxy);
@@ -124,11 +124,10 @@ void RenderViewUI::Render(const TArray<FRenderProxy*>& RenderObejcts) {
 		dc.userData = nullptr;
 		dc.sortKey = ((uint64_t)dc.shader->ID << 32) | (uint64_t)Mat->GetInternalID();
 
-		UIDrawCalls.push_back(dc);
+		UIDrawCalls.Push(dc);
 	}
 
-	std::sort(UIDrawCalls.begin(), UIDrawCalls.end(),
-		[](const DrawCall& a, const DrawCall& b) {
+	UIDrawCalls.Sort([](const DrawCall& a, const DrawCall& b) {
 			return a.sortKey < b.sortKey;
 		});
 

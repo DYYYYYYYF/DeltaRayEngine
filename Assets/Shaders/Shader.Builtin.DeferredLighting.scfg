@@ -24,9 +24,16 @@ attribute=vec2,in_texcoord
 
 # Uniforms: type,scope,name
 # NOTE: For scope: 0=global, 1=instance, 2=local
+# 全局段成员顺序必须与 DeferredLighting.vert/frag 中 GlobalUniformObject 的成员顺序一致：
+# mat4 + vec4*n + float 的排布在 std140 与引擎的紧凑累加规则下偏移完全相同。
 uniform=mat4,0,light_space_matrix
+uniform=vec4,0,ambient_color
+uniform=vec4,0,light_direction
+uniform=vec4,0,light_color
+uniform=vec4,0,light_intensity
 uniform=float,0,time
-uniform=vec4,1,light_intensity
+uniform=float,0,shadow_bias
+uniform=float,0,shadow_strength
 uniform=u32,1,debug_mode
 uniform=samp,1,gbuffer_albedo_texture
 uniform=samp,1,gbuffer_normal_texture

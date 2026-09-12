@@ -5,7 +5,14 @@ layout (location = 1) in vec2 vTexcoord;
 
 layout (set = 0, binding = 0, std140) uniform GlobalUniformObject{
     mat4 light_space_matrix;
+    // 与 DeferredLighting.frag 保持完全一致的成员顺序与类型（布局必须一致）
+    vec4 ambient_color;
+    vec4 light_direction;
+    vec4 light_color;
+    vec4 light_intensity;
     float global_time;
+    float shadow_bias;
+    float shadow_strength;
 }GlobalUBO;
 
 layout (location = 0) out float out_time;
@@ -37,6 +44,7 @@ void main(){
 
     // Copy props
     out_time = GlobalUBO.global_time;
-    OutDto.ambient_color = vec4(0.18, 0.18, 0.18, 1.0);
+    // 环境光由光照 Actor 通过全局 UBO 提供
+    OutDto.ambient_color = GlobalUBO.ambient_color;
     OutDto.view_position = vec3(0.0, 0.0, 0.0);
 }

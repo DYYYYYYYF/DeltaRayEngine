@@ -33,7 +33,7 @@ public:
 	virtual bool EndFrame() = 0;
 	virtual void Resize(unsigned short width, unsigned short height) = 0;
 	virtual void DrawGeometry(GeometryRenderData* geometry) = 0;
-	virtual void ExecuteDrawCalls(const std::vector<DrawCall>& draw_calls, size_t frame_number, const FFrameData& data) = 0;
+	virtual void ExecuteDrawCalls(const TArray<DrawCall>& draw_calls, size_t frame_number, const FFrameData& data) = 0;
 
 	// Texture
 	virtual UTexture* AcquireTexture(const FString& name, bool auto_release) = 0;
@@ -45,7 +45,7 @@ public:
 	// Renderpass
 	virtual bool BeginRenderpass(IRenderpass* pass, RenderTarget* target) = 0;
 	virtual bool EndRenderpass(IRenderpass* pass) = 0;
-	virtual bool CreateRenderTarget(unsigned char attachment_count, std::vector<RenderTargetAttachment> attachments, IRenderpass* pass, uint32_t width, uint32_t height, RenderTarget* out_target) = 0;
+	virtual bool CreateRenderTarget(unsigned char attachment_count, TArray<RenderTargetAttachment> attachments, IRenderpass* pass, uint32_t width, uint32_t height, RenderTarget* out_target) = 0;
 	virtual void DestroyRenderTarget(RenderTarget* target, bool free_internal_memory) = 0;
 	virtual bool CreateRenderpass(IRenderpass* out_renderpass,const RenderpassConfig& config) = 0;
 	virtual void DestroyRenderpass(IRenderpass* pass) = 0;
@@ -64,8 +64,8 @@ public:
 	virtual void ResetScissor() = 0;
 
 	// Shader
-	virtual bool CreateShader(UShader* shader, const FShaderConfig* config, IRenderpass* pass, const TArray<FString>& stage_filenames, std::vector<ShaderStage>& stages) = 0;
-	virtual uint32_t AcquireInstanceResource(UShader* shader, std::vector<FTextureMap*>& maps) = 0;
+	virtual bool CreateShader(UShader* shader, const FShaderConfig* config, IRenderpass* pass, const TArray<FString>& stage_filenames, TArray<ShaderStage>& stages) = 0;
+	virtual uint32_t AcquireInstanceResource(UShader* shader, TArray<FTextureMap*>& maps) = 0;
 	virtual bool ReleaseInstanceResource(UShader* shader, uint64_t instance_id) = 0;
 
 	virtual bool AcquireTextureMap(FTextureMap* map) = 0;

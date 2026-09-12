@@ -65,7 +65,7 @@ struct VulkanShaderInstanceState {
 	uint32_t id = INVALID_ID;
 	size_t offset = 0;
 	VulkanShaderDescriptorSetState descriptor_set_state;
-	std::vector<FTextureMap*> instance_texture_maps;
+	TArray<FTextureMap*> instance_texture_maps;
 };
 
 // The index of the global descriptor set.

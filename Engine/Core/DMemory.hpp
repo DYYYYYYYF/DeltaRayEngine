@@ -8,7 +8,9 @@
 class FString;
 
 #ifndef DEFAULT_ALIGNMENT_SIZE
-#define DEFAULT_ALIGNMENT_SIZE 8
+// 默认分配对齐必须 >= 16：引擎中存在 alignas(16) 的类型（Vector4、FTransform 等），
+// 若基址不满足其对齐要求，编译器生成的 movaps 访问会因地址未对齐而触发 0xC0000005。
+#define DEFAULT_ALIGNMENT_SIZE 16
 #endif
 
 enum MemoryType {
@@ -124,7 +126,10 @@ T* NewObject(MemoryType ObjMemoryType, Args&&... args) {
 	static_assert(std::is_constructible_v<T, Args...>,
 		"T must be constructible with given arguments");
 
-	void* memory = Memory::Allocate(sizeof(T), ObjMemoryType);
+	// 按类型自身的对齐要求分配基址：T 含 alignas(16)/alignas(32) 成员时，对象基址必须满足
+	// alignof(T)，否则成员访问（movaps）会因未对齐触发访问冲突。
+	constexpr size_t ObjectAlignment = alignof(T) > DEFAULT_ALIGNMENT_SIZE ? alignof(T) : DEFAULT_ALIGNMENT_SIZE;
+	void* memory = Memory::AllocateAligned(sizeof(T), ObjectAlignment, ObjMemoryType);
 	if (memory == nullptr) {
 		GLOG(Log::eFatal, "Failed to allocate memory");
 		return nullptr;

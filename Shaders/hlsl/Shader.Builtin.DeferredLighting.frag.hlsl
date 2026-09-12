@@ -4,7 +4,14 @@
 struct GlobalUniformObject
 {
     float4x4 light_space_matrix;
+    // 以下光照参数全部由场景中的方向光 Actor 配置，经全局 UBO 上传
+    float4 ambient_color;
+    float4 light_direction;   // xyz = 光源指向场景的单位方向
+    float4 light_color;
+    float4 light_intensity;
     float global_time;
+    float shadow_bias;
+    float shadow_strength;    // 0 = 无阴影，1 = 全阴影
 };
 
 // 常量定义
@@ -12,12 +19,10 @@ static const int SAMP_ALBEDO = 0;
 static const int SAMP_NORMAL = 1;
 static const int SAMP_POSITION = 2;
 static const int SAMP_SHADOW = 3;
-static const float SHADOW_BIAS = 0.0015;
 
 // 实例uniform对象 - 参考原始GLSL InstanceUniformObject
 struct InstanceUniformObject
 {
-    float4 light_intensity;
     int debug_mode;
 };
 
@@ -58,12 +63,8 @@ struct PSOutput
 [[vk::binding(1, 1)]] Texture2D Samplers[4];
 [[vk::binding(1, 1)]] SamplerState DefaultSampler[4];
 
-// 光源定义（与原World着色器保持一致）
-static DirectionalLight dir_light = 
-{
-    float3(-0.57735f, -0.57735f, -0.57735f),
-    float4(0.8f, 0.8f, 0.8f, 1.0f)
-};
+// 方向光不再使用硬编码常量：方向、颜色、强度、阴影偏置/强度全部来自 GlobalUBO，
+// 数据由场景中的方向光 Actor 配置并逐帧上传。
 
 static PointLight point_light_0 = 
 {
@@ -177,7 +178,7 @@ float4 PBR(PointLight light, float3 norm, float3 albedo, float3 camPos, float3 f
     float gamma_correct_param = 2.2f;
     color = pow(color, float3(1.0f / gamma_correct_param, 1.0f / gamma_correct_param, 1.0f / gamma_correct_param));
 
-    return float4(color, 1.0f) * InstanceUBO.light_intensity;
+    return float4(color, 1.0f) * GlobalUBO.light_intensity;
 }
 
 // 阴影计算(3x3 PCF)
@@ -187,7 +188,7 @@ float CalculateShadow(float3 worldPosition, float3 worldNormal)
     float3 proj = lightSpacePos.xyz / lightSpacePos.w;
     proj = proj * 0.5 + 0.5;                       // NDC -> [0,1]
     if (proj.z > 1.0 || proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0) return 0.0;
-    float bias = max(SHADOW_BIAS * (1.0 - dot(worldNormal, normalize(-dir_light.direction))), 0.0015);
+    float bias = max(GlobalUBO.shadow_bias * (1.0 - dot(worldNormal, normalize(-GlobalUBO.light_direction.xyz))), 0.0015);
     float shadow = 0.0;
     float2 texelSize = 1.0 / float2(2048.0, 2048.0);
     for (int x = -1; x <= 1; ++x) {
@@ -211,7 +212,7 @@ float4 CalculateDirectionalLight(DirectionalLight light, float3 normal, float3 v
     float4 Diffuse = float4(albedo * fDiffuseFactor, 1.0);
     float4 Specular = float4(light.color.rgb * SpecularFactor * (1.0 - metallic), 1.0);
     
-    return (Ambient + Diffuse + Specular) * InstanceUBO.light_intensity;
+    return (Ambient + Diffuse + Specular) * GlobalUBO.light_intensity;
 }
 
 // 点光源计算
@@ -239,7 +240,7 @@ float4 CalculatePointLight(PointLight light, float3 normal, float3 frag_position
     Ambient *= Attenuation;
     Specular *= Attenuation;
     
-    return (Ambient + Diffuse + Specular) * InstanceUBO.light_intensity;
+    return (Ambient + Diffuse + Specular) * GlobalUBO.light_intensity;
 }
 
 // 片段着色器主函数
@@ -294,12 +295,17 @@ PSOutput main(PSInput input)
     {
         // 标准光照计算
         float3 viewDirection = normalize(input.view_position - worldPosition);
-        
+
+        // 方向光：参数来源于光照 Actor（GlobalUBO），不再使用硬编码常量
+        DirectionalLight dir_light;
+        dir_light.direction = normalize(GlobalUBO.light_direction.xyz);
+        dir_light.color = GlobalUBO.light_color;
+
         // PBR光照计算
         output.FragColor = PBR(point_light_0, worldNormal, albedo, input.view_position, worldPosition, metallic, roughness, 1.0);
         
-        // 方向光阴影(仅作用于方向光分量)
-        float shadow = CalculateShadow(worldPosition, worldNormal);
+        // 方向光阴影(仅作用于方向光分量)，强度由光照 Actor 配置的 shadow_strength 缩放
+        float shadow = CalculateShadow(worldPosition, worldNormal) * clamp(GlobalUBO.shadow_strength, 0.0, 1.0);
         
         // 添加方向光
         output.FragColor += CalculateDirectionalLight(dir_light, worldNormal, viewDirection, albedo, metallic, roughness, input.ambient_color) * (1.0 - shadow);

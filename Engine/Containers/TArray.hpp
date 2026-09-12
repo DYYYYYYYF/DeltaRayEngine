@@ -6,6 +6,7 @@
 #include "Platform/Platform.hpp"
 #include <type_traits>
 #include <utility>
+#include <algorithm>
 
 #define ARRAY_DEFAULT_CAPACITY 1
 #define ARRAY_DEFAULT_RESIZE_FACTOR 2
@@ -17,6 +18,15 @@ size_t(unsigned long long) length = number of elements currently contained
 size_t(unsigned long long) stride = size of each element in bytes
 void* elements
 */
+// 判断类型是否完整：元素类型可能仅为前向声明（不完整类型），
+// 此时跳过元素的显式析构，避免 error C2027（std::vector 对不完整类型不实例化析构，
+// TArray 需显式做同样的保护）。
+template<typename T, typename = void>
+struct TIsCompleteType : std::false_type {};
+
+template<typename T>
+struct TIsCompleteType<T, std::void_t<decltype(sizeof(T))>> : std::true_type {};
+
 template<typename ElementType>
 class DAPI TArray {
 public:
@@ -183,7 +193,7 @@ public:
 				else {
 					// 收缩：销毁多余元素
 					for (size_t i = newSize; i < Length; ++i) {
-						if constexpr (!std::is_pointer<ElementType>::value) {
+						if constexpr (TIsCompleteType<ElementType>::value && !std::is_pointer<ElementType>::value) {
 							ArrayMemory[i].~ElementType();
 						}
 					}
@@ -226,7 +236,7 @@ public:
 			}
 
 			// 销毁原数组中的元素
-			if constexpr (!std::is_pointer<ElementType>::value) {
+			if constexpr (TIsCompleteType<ElementType>::value && !std::is_pointer<ElementType>::value) {
 				for (size_t i = 0; i < Length; ++i) {
 					ArrayMemory[i].~ElementType();
 				}
@@ -326,7 +336,7 @@ public:
 
 		ElementType result = std::move(ArrayMemory[Length - 1]);
 
-		if constexpr (!std::is_pointer<ElementType>::value) {
+		if constexpr (TIsCompleteType<ElementType>::value && !std::is_pointer<ElementType>::value) {
 			ArrayMemory[Length - 1].~ElementType();
 		}
 
@@ -348,7 +358,7 @@ public:
 			new(ArrayMemory + i) ElementType(std::move(ArrayMemory[i + 1]));
 		}
 
-		if constexpr (!std::is_pointer<ElementType>::value) {
+		if constexpr (TIsCompleteType<ElementType>::value && !std::is_pointer<ElementType>::value) {
 			ArrayMemory[Length - 1].~ElementType();
 		}
 
@@ -356,9 +366,58 @@ public:
 		return result;
 	}
 
+	// 移除指定下标的元素（后续元素前移），下标越界时不执行任何操作
+	void RemoveAt(size_t index) {
+		if (index >= Length) {
+			GLOG(Log::eError, "RemoveAt index out of bounds! Length: %zu, Index: %zu", Length, index);
+			return;
+		}
+
+		// 向前移动后续元素
+		for (size_t i = index; i < Length - 1; ++i) {
+			ArrayMemory[i].~ElementType();
+			new(ArrayMemory + i) ElementType(std::move(ArrayMemory[i + 1]));
+		}
+
+		if constexpr (TIsCompleteType<ElementType>::value && !std::is_pointer<ElementType>::value) {
+			ArrayMemory[Length - 1].~ElementType();
+		}
+
+		Length--;
+	}
+
+	// 仅预留容量（不改变已有元素数量），容量不足时重新分配
+	void Reserve(size_t newCapacity) {
+		if (newCapacity <= Capacity) {
+			return;
+		}
+
+		ElementType* TempMemory = (ElementType*)Memory::Allocate(newCapacity * sizeof(ElementType), MemoryType::eMemory_Type_Array);
+		if (!TempMemory) {
+			GLOG(Log::eError, "Failed to allocate memory during reserve");
+			return;
+		}
+
+		for (size_t i = 0; i < Length; ++i) {
+			new(TempMemory + i) ElementType(std::move(ArrayMemory[i]));
+		}
+
+		if (ArrayMemory != nullptr) {
+			if constexpr (TIsCompleteType<ElementType>::value && !std::is_pointer<ElementType>::value) {
+				for (size_t i = 0; i < Length; ++i) {
+					ArrayMemory[i].~ElementType();
+				}
+			}
+			Memory::Free(ArrayMemory, MemoryType::eMemory_Type_Array);
+		}
+
+		ArrayMemory = TempMemory;
+		Capacity = newCapacity;
+	}
+
 	void Clear() {
 		if (ArrayMemory != nullptr) {
-			if constexpr (!std::is_pointer<ElementType>::value) {
+			if constexpr (TIsCompleteType<ElementType>::value && !std::is_pointer<ElementType>::value) {
 				for (size_t i = 0; i < Length; ++i) {
 					ArrayMemory[i].~ElementType();
 				}
@@ -369,7 +428,7 @@ public:
 
 	void Empty() {
 		if (ArrayMemory != nullptr) {
-			if constexpr (!std::is_pointer<ElementType>::value) {
+			if constexpr (TIsCompleteType<ElementType>::value && !std::is_pointer<ElementType>::value) {
 				for (size_t i = 0; i < Length; ++i) {
 					ArrayMemory[i].~ElementType();
 				}
@@ -388,6 +447,22 @@ public:
 	size_t GetCapacity() const { return Capacity; }
 
 	ElementType* Data() { return ArrayMemory; }
+
+	// 排序：替代标准库写法 std::sort(Array.begin(), Array.end(), cmp)
+	// 元素类型需为完整类型；内部以原生指针作为随机访问迭代器
+	template<typename Compare>
+	void Sort(Compare compare) {
+		if (Length > 1) {
+			std::sort(ArrayMemory, ArrayMemory + Length, compare);
+		}
+	}
+
+	void Sort() {
+		if (Length > 1) {
+			std::sort(ArrayMemory, ArrayMemory + Length);
+		}
+	}
+
 	const ElementType* Data() const { return ArrayMemory; }
 
 	// 修正了赋值操作符 - 添加了自赋值检查和异常安全

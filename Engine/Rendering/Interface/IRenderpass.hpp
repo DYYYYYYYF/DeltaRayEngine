@@ -60,7 +60,7 @@ public:
 
 public:
 	unsigned char RenderTargetCount;
-	std::vector<struct RenderTarget> Targets; 
+	TArray<struct RenderTarget> Targets; 
 	void* Renderpass = nullptr;
 
 protected:

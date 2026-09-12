@@ -23,7 +23,7 @@ struct GeometryDistance {
 	float distance;
 };
 
-static void QuickSort(std::vector<GeometryDistance>& arr, int low_index, int high_index, bool ascending);
+static void QuickSort(TArray<GeometryDistance>& arr, int low_index, int high_index, bool ascending);
 
 static bool RenderViewWorldOnEvent(eEventCode code, void* sender, void* listenerInst, SEventContext context) {
 	IRenderView* self = (IRenderView*)listenerInst;
@@ -82,7 +82,7 @@ RenderViewWorld::RenderViewWorld(const RenderViewConfig& config) {
 	Name = config.name;
 	CustomShaderName = config.custom_shader_name;
 	RenderpassCount = config.pass_count;
-	Passes.resize(RenderpassCount);
+	Passes.Resize(RenderpassCount);
 }
 
 bool RenderViewWorld::OnCreate(const RenderViewConfig& config) {
@@ -164,7 +164,7 @@ static void Swap(GeometryDistance* a, GeometryDistance* b) {
 	*b = temp;
 }
 
-static int Partition(std::vector<GeometryDistance>& arr, int low_index, int high_index, bool ascending) {
+static int Partition(TArray<GeometryDistance>& arr, int low_index, int high_index, bool ascending) {
 	GeometryDistance Privot = arr[high_index];
 	int i = (low_index - 1);
 
@@ -187,7 +187,7 @@ static int Partition(std::vector<GeometryDistance>& arr, int low_index, int high
 	return i + 1;
 }
 
-static void QuickSort(std::vector<GeometryDistance>& arr, int low_index, int high_index, bool ascending) {
+static void QuickSort(TArray<GeometryDistance>& arr, int low_index, int high_index, bool ascending) {
 	if (low_index < high_index) {
 		int PartitionIndex = Partition(arr, low_index, high_index, ascending);
 

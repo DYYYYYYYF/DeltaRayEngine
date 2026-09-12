@@ -4,11 +4,17 @@ layout (location = 0) out vec4 FragColor;
 
 layout (set = 0, binding = 0, std140) uniform GlobalUniformObject{
     mat4 light_space_matrix;
+    // 以下光照参数全部由场景中的方向光 Actor 配置，经全局 UBO 上传
+    vec4 ambient_color;
+    vec4 light_direction;      // xyz = 光源指向场景的单位方向
+    vec4 light_color;          // 光源颜色
+    vec4 light_intensity;      // 光照强度
     float global_time;
+    float shadow_bias;         // 阴影深度偏置
+    float shadow_strength;     // 阴影强度（0 = 无阴影，1 = 全阴影）
 }GlobalUBO;
 
 layout (set = 1, binding = 0) uniform InstanceUniformObject{
-    vec4 light_intensity;
     int debug_mode;
 }InstanceUBO;
 
@@ -16,7 +22,6 @@ const int SAMP_ALBEDO = 0;
 const int SAMP_NORMAL = 1;
 const int SAMP_POSITION = 2;
 const int SAMP_SHADOW = 3;
-const float SHADOW_BIAS = 0.005;
 layout (set = 1, binding = 1) uniform sampler2D Samplers[4];
 
 layout (location = 0) flat in float global_time;
@@ -40,10 +45,8 @@ struct PointLight{
     float quadratic;
 };
 
-DirectionalLight dir_light = DirectionalLight(
-    vec3(-0.57735f, -0.57735f, -0.57735f),
-    vec4(0.8f, 0.8f, 0.8f, 1.0f)
-);
+// 方向光不再使用硬编码常量：方向、颜色、强度、阴影偏置/强度全部来自 GlobalUBO，
+// 数据由场景中的方向光 Actor 配置并逐帧上传。
 
 PointLight point_light_0 = PointLight(
     vec3(-5.5f, 10.0f, -5.5f),
@@ -108,12 +111,18 @@ void main(){
     else {
         // 标准光照计算
         vec3 viewDirection = normalize(in_dto.view_position - worldPosition);
-        
+
+        // 方向光：参数来源于光照 Actor（GlobalUBO），不再使用硬编码常量
+        DirectionalLight dir_light = DirectionalLight(
+            normalize(GlobalUBO.light_direction.xyz),
+            GlobalUBO.light_color
+        );
+
         // PBR光照计算
         FragColor = PBR(point_light_0, worldNormal, albedo, in_dto.view_position, worldPosition, metallic, roughness, 1.0);
         
-        // 方向光阴影(仅作用于方向光分量)
-        float shadow = CalculateShadow(worldPosition, worldNormal);
+        // 方向光阴影(仅作用于方向光分量)，强度由光照 Actor 配置的 shadow_strength 缩放
+        float shadow = CalculateShadow(worldPosition, worldNormal) * clamp(GlobalUBO.shadow_strength, 0.0, 1.0);
 
         // 添加方向光
         FragColor += CalculateDirectionalLight(dir_light, worldNormal, viewDirection, albedo, metallic, roughness) * (1.0 - shadow);
@@ -135,7 +144,7 @@ float CalculateShadow(vec3 worldPosition, vec3 worldNormal){
     vec3 proj = lightSpacePos.xyz / lightSpacePos.w;
     proj = proj * 0.5 + 0.5;                       // NDC -> [0,1]
     if (proj.z > 1.0 || proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0) return 0.0;
-    float bias = max(SHADOW_BIAS * (1.0 - dot(worldNormal, normalize(-dir_light.direction))), 0.0015);
+    float bias = max(GlobalUBO.shadow_bias * (1.0 - dot(worldNormal, normalize(-GlobalUBO.light_direction.xyz))), 0.0015);
     float shadow = 0.0;
     vec2 texelSize = 1.0 / vec2(2048.0);
     for (int x = -1; x <= 1; ++x) {
@@ -157,7 +166,7 @@ vec4 CalculateDirectionalLight(DirectionalLight light, vec3 normal, vec3 view_di
     vec4 Diffuse = vec4(vec3(albedo * fDiffuseFactor), 1.0);
     vec4 Specular = vec4(vec3(light.color * SpecularFactor * (1.0 - metallic)), 1.0);
     
-    return (Ambient + Diffuse + Specular) * InstanceUBO.light_intensity;
+    return (Ambient + Diffuse + Specular) * GlobalUBO.light_intensity;
 }
 
 vec4 CalculatePointLight(PointLight light, vec3 normal, vec3 frag_position, vec3 view_direction, vec3 albedo, float metallic, float roughness){
@@ -183,7 +192,7 @@ vec4 CalculatePointLight(PointLight light, vec3 normal, vec3 frag_position, vec3
     Ambient *= Attenuation;
     Specular *= Attenuation;
     
-    return (Ambient + Diffuse + Specular) * InstanceUBO.light_intensity;
+    return (Ambient + Diffuse + Specular) * GlobalUBO.light_intensity;
 }
 
 //////////////////////////////   PBR   ////////////////////////////////////////
@@ -275,5 +284,5 @@ vec4 PBR(PointLight light, vec3 norm, vec3 albedo, vec3 camPos, vec3 fragPos, fl
     float gamma_correct_param = 2.2f;
     color = pow(color, vec3(1.0f / gamma_correct_param));
 
-    return vec4(color, 1.0f) * InstanceUBO.light_intensity;
+    return vec4(color, 1.0f) * GlobalUBO.light_intensity;
 }

@@ -50,7 +50,7 @@ private:
 	UTexture* DepthTargetAttachment;
 
 	int InstanceCount = 0;
-	std::vector<bool> InstanceUpdated;
+	TArray<bool> InstanceUpdated;
 
 	short MouseX = 0, MouseY = 0;
 

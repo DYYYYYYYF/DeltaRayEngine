@@ -51,7 +51,7 @@ bool VulkanShader::Initialize() {
 	}
 
 	// Process attributes.
-	uint32_t AttributeCount = (uint32_t)Attributes.size();
+	uint32_t AttributeCount = (uint32_t)Attributes.Size();
 	uint32_t Offset = 0;
 	for (uint32_t i = 0; i < AttributeCount; ++i) {
 		// Setup the new attribute.
@@ -205,17 +205,17 @@ void VulkanShader::Destroy(){
 	Memory::Zero(&Config, sizeof(VulkanShaderConfig));
 
 	// Free hash mem.
-	HashMap.clear();
+	HashMap.Clear();
 
 	// Reset status.
 	Status = EShaderStatus::eShader_State_Not_Created;
 
-	uint32_t SamplerCount = (uint32_t)GlobalTextureMaps.size();
+	uint32_t SamplerCount = (uint32_t)GlobalTextureMaps.Size();
 	for (uint32_t i = 0; i < SamplerCount; ++i) {
 		GlobalTextureMaps[i] = nullptr;
 	}
-	GlobalTextureMaps.clear();
-	std::vector<FTextureMap*>().swap(GlobalTextureMaps);
+	GlobalTextureMaps.Clear();
+	GlobalTextureMaps.Empty();
 }
 
 bool VulkanShader::Use() {
@@ -260,7 +260,7 @@ bool VulkanShader::ApplyGlobal() {
 		.setPBufferInfo(&BufferInfo);
 
 	// Global Samplers
-	uint32_t SamplerCount = (uint32_t)GlobalTextureMaps.size();
+	uint32_t SamplerCount = (uint32_t)GlobalTextureMaps.Size();
 	std::vector<vk::DescriptorImageInfo> ImageInfos(SamplerCount);
 	uint32_t ValidCount = 0;
 
@@ -490,7 +490,7 @@ bool VulkanShader::SetSamplerByIndex(uint32_t index, const FTextureMap* map) {
 
 bool VulkanShader::SetSampler(const ShaderUniform* uniform, const FTextureMap* map){
 	if (uniform->scope == eShader_Scope_Global) {
-		if (uniform->location >= (uint32_t)GlobalTextureMaps.size()) {
+		if (uniform->location >= (uint32_t)GlobalTextureMaps.Size()) {
 			GLOG(Log::eError, "SetSamplerByIndex — Global sampler location 越界。");
 			return false;
 		}
@@ -498,7 +498,7 @@ bool VulkanShader::SetSampler(const ShaderUniform* uniform, const FTextureMap* m
 	}
 	else {
 		VulkanShaderInstanceState& State = InstanceStates[BoundInstanceId];
-		if (uniform->location >= (uint32_t)State.instance_texture_maps.size()) {
+		if (uniform->location >= (uint32_t)State.instance_texture_maps.Size()) {
 			GLOG(Log::eError, "SetSamplerByIndex — Instance sampler location 越界。");
 			return false;
 		}
@@ -695,7 +695,7 @@ bool VulkanShader::CreatePipeline() {
 	VulkanPipelineConfig PipelineConfig;
 	PipelineConfig.renderpass = Renderpass;
 	PipelineConfig.stride = AttributeStride;
-	PipelineConfig.attribute_count = (uint32_t)Attributes.size();
+	PipelineConfig.attribute_count = (uint32_t)Attributes.Size();
 	PipelineConfig.attributes = Config.attributes;
 	PipelineConfig.descriptor_set_layout_count = Config.descriptor_set_count;
 	PipelineConfig.descriptor_set_layout = DescriptorSetLayouts;

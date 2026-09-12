@@ -86,7 +86,7 @@ public:
 	IRenderer* Renderer = nullptr;
 	ShaderSystem::Config ShaderSystemConfig;
 	
-	std::unordered_map<FString, uint32_t> ShaderMap;
+	TMap<FString, uint32_t> ShaderMap;
 	TMap<size_t, UShader*> Shaders;
 	
 	bool Initilized = false;

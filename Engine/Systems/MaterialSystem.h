@@ -75,9 +75,9 @@ public:
 	SMaterialSystemConfig MaterialSystemConfig;
 
 	// Array of registered materials.
-	std::vector<UMaterial*> RegisteredMaterials;
+	TArray<UMaterial*> RegisteredMaterials;
 	// Hashtable for material lookups.
-	std::unordered_map<FString, uint32_t> MaterialMap;
+	TMap<FString, uint32_t> MaterialMap;
 
 	// Know locations for the material shader.
 	FMaterialShaderUniformLocations MaterialLocations;

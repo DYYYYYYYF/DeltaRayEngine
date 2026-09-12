@@ -32,7 +32,7 @@ public:
 
 	virtual void OnResize(unsigned short width, unsigned short height);
 	virtual bool DrawFrame(UWorld* World);
-	virtual void ExecuteDrawCalls(const std::vector<DrawCall>& draw_calls, size_t frame_number, const FFrameData& data);
+	virtual void ExecuteDrawCalls(const TArray<DrawCall>& draw_calls, size_t frame_number, const FFrameData& data);
 
 public:
 	virtual UTexture* AcquireTexture(const FString& name, bool auto_release = true);
@@ -75,7 +75,7 @@ public:
 	 * @param stages A array of shader_stages indicating what render stages (vertex, fragment, etc.) used in this shader.
 	 * @return True on success; otherwise false.
 	 */
-	virtual bool CreateRenderShader(UShader* shader, const FShaderConfig* config, IRenderpass* pass, const TArray<FString>& stage_filenames, std::vector<ShaderStage> stages);
+	virtual bool CreateRenderShader(UShader* shader, const FShaderConfig* config, IRenderpass* pass, const TArray<FString>& stage_filenames, TArray<ShaderStage> stages);
 
 	/**
 	 * @brief Destroys the given shader and releases any resources held by it.
@@ -100,7 +100,7 @@ public:
 	 * @param maps Array to hold the texture maps.
 	 * @return INVALID_ID on false; otherwise return the instance id.
 	 */
-	virtual uint32_t AcquireInstanceResource(UShader* shader, std::vector<FTextureMap*> maps);
+	virtual uint32_t AcquireInstanceResource(UShader* shader, TArray<FTextureMap*> maps);
 
 	/**
 	 * @brief Releases internal instance-level resources for the given instance id.
@@ -137,7 +137,7 @@ public:
 	virtual void ResetScissor();
 
 	// Renderpass
-	virtual bool CreateRenderTarget(unsigned char attachment_count, std::vector<RenderTargetAttachment> attachments, IRenderpass* pass, uint32_t width, uint32_t height, RenderTarget* out_target);
+	virtual bool CreateRenderTarget(unsigned char attachment_count, TArray<RenderTargetAttachment> attachments, IRenderpass* pass, uint32_t width, uint32_t height, RenderTarget* out_target);
 	virtual void DestroyRenderTarget(RenderTarget* target, bool free_internal_memory) ;
 	virtual bool CreateRenderpass(IRenderpass* out_renderpass, const RenderpassConfig& config);
 	virtual void DestroyRenderpass(IRenderpass* pass) ;

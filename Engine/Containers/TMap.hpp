@@ -30,9 +30,12 @@
  //  默认哈希器（可针对具体类型特化）
  // ============================================================
 
+// ── 通用回退：枚举等可按整数转换的键类型（无显式特化时使用） ──
 template<typename K>
 struct TDefaultHasher {
-    size_t operator()(const K& key) const noexcept;
+    size_t operator()(const K& key) const noexcept {
+        return TDefaultHasher<uint64_t>{}(static_cast<uint64_t>(key));
+    }
 };
 
 // ── const char* 特化 ────────────────────────────────────────

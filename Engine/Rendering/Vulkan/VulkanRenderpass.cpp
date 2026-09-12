@@ -24,7 +24,7 @@ bool VulkanRenderPass::Create(VulkanContext* context, const RenderpassConfig& co
 	// Can always just look at the first target since they are all the same(one per frame).
 	// render target* taget = &Targets[0]
 	vk::AttachmentDescription AttachmentDesc;
-	for (uint32_t i = 0; i < config.target.attachments.size(); ++i) {
+	for (uint32_t i = 0; i < config.target.attachments.Size(); ++i) {
 		const RenderTargetAttachmentConfig* AttachmentConfig = &config.target.attachments[i];
 		if (AttachmentConfig->type & RenderTargetAttachmentType::eRender_Target_Attachment_Type_Color) {
 			// Color attachment
@@ -316,7 +316,7 @@ void VulkanRenderPass::Begin(RenderTarget* target) {
 		.setRenderArea(Area);
 
 	// 计算所需的清除值数组大小
-	uint32_t AttachmentCount = (uint32_t)target->attachments.size();
+	uint32_t AttachmentCount = (uint32_t)target->attachments.Size();
 	if (AttachmentCount == 0) {
 		GLOG(Log::eWarn, "VulkanRenderPass::Begin - No attachments in target");
 		BeginInfo.setClearValueCount(0);

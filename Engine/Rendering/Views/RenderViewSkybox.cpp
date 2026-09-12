@@ -42,7 +42,7 @@ RenderViewSkybox::RenderViewSkybox(const RenderViewConfig& config) {
 	Name = config.name;
 	CustomShaderName = config.custom_shader_name;
 	RenderpassCount = config.pass_count;
-	Passes.resize(RenderpassCount);
+	Passes.Resize(RenderpassCount);
 	Renderer = IRenderer::GetRenderer();
 }
 
@@ -148,8 +148,8 @@ void RenderViewSkybox::Render(const TArray<FRenderProxy*>& RenderObejcts) {
 	DC.shader = UsedShader;
 	DC.sortKey = ((uint64_t)UsedShader->ID << 32) | (uint64_t)DC.material->GetInternalID();
 
-	std::vector<DrawCall> DrawCalls;
-	DrawCalls.push_back(DC);
+	TArray<DrawCall> DrawCalls;
+	DrawCalls.Push(DC);
 
 	// Execute pass
 	IRenderpass* SkyboxPass = (IRenderpass*)&Passes[0];

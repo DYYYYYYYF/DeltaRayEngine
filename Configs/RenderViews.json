@@ -77,7 +77,7 @@
               },
               {
                 "type": "Depth",
-                "source": "Default",
+                "source": "View",
                 "load_op": "Clear",
                 "store_op": "Store",
                 "present_after": false,

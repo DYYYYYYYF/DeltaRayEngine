@@ -88,10 +88,10 @@ bool ShaderLoader::ParseLineData(size_t index, const FString& line, FShaderConfi
 		resource->stage_names = StageNames;
 
 		// Ensue stage name and stage filename count are the same.
-		resource->stages.resize(StageNames.Size());
+		resource->stages.Resize(StageNames.Size());
 
 		// Parse each stage and add the right type to the array.
-		for (unsigned short i = 0; i < resource->stages.size(); ++i) {
+		for (unsigned short i = 0; i < resource->stages.Size(); ++i) {
 			if (StageNames[i].Compare("frag") == 0 || StageNames[i].Compare("fragment") == 0) {
 				resource->stages[i] = ShaderStage::eShader_Stage_Fragment;
 			}
@@ -111,7 +111,7 @@ bool ShaderLoader::ParseLineData(size_t index, const FString& line, FShaderConfi
 	}
 	else if (TrimmedVarName.Compare("stagefiles") == 0) {
 		resource->stage_filenames = TrimmedValue.Split(',', true, true);
-		if (resource->stages.size() != resource->stage_filenames.Size()) {
+		if (resource->stages.Size() != resource->stage_filenames.Size()) {
 			GLOG(Log::eError, "shader_loader_load: Invalid file layout. Attribute fields must be 'type,name'. Skipping.");
 		}
 	}
@@ -209,7 +209,7 @@ bool ShaderLoader::ParseLineData(size_t index, const FString& line, FShaderConfi
 			Attribute.name = Fields[1];
 
 			// Add the attribute.
-			resource->attributes.push_back(Attribute);
+			resource->attributes.Push(Attribute);
 		}
 
 		Fields.Clear();
@@ -302,7 +302,7 @@ bool ShaderLoader::ParseLineData(size_t index, const FString& line, FShaderConfi
 			Uniform.name = Fields[2];
 
 			// Add the uniform.
-			resource->uniforms.push_back(Uniform);
+			resource->uniforms.Push(Uniform);
 		}
 
 		Fields.Clear();
@@ -321,6 +321,12 @@ ShaderSemantic ShaderLoader::ParseSemantic(const FString& semantic) {
 	if (semantic.Compare("render_mode") == 0) return ShaderSemantic::eShaderSemantic_RenderMode;
 	if (semantic.Compare("time") == 0) return ShaderSemantic::eShaderSemantic_Time;
 	if (semantic.Compare("light_space_matrix") == 0) return ShaderSemantic::eShaderSemantic_LightSpaceMatrix;
+	// 方向光（光照 Actor 配置）
+	if (semantic.Compare("light_direction") == 0) return ShaderSemantic::eShaderSemantic_LightDirection;
+	if (semantic.Compare("light_color") == 0) return ShaderSemantic::eShaderSemantic_LightColor;
+	if (semantic.Compare("light_intensity") == 0) return ShaderSemantic::eShaderSemantic_LightIntensity;
+	if (semantic.Compare("shadow_bias") == 0) return ShaderSemantic::eShaderSemantic_ShadowBias;
+	if (semantic.Compare("shadow_strength") == 0) return ShaderSemantic::eShaderSemantic_ShadowStrength;
 	if (semantic.Compare("model") == 0) return ShaderSemantic::eShaderSemantic_Model_Matrix;
 
 	if (semantic.Compare("gbuffer_albedo_texture") == 0) return ShaderSemantic::eSemantic_GBuffer_Albedo;
@@ -344,10 +350,10 @@ void ShaderLoader::Unload(UAsset* resource) {
 	Data->stage_names.Clear();
 
 	// Clean up attributes.
-	Data->attributes.clear();
+	Data->attributes.Clear();
 
 	// Clean up uniforms.
-	Data->uniforms.clear();
+	Data->uniforms.Clear();
 
 	if (resource->Data) {
 		Memory::Free(resource->Data, MemoryType::eMemory_Type_Texture);

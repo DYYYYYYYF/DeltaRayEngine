@@ -34,7 +34,7 @@ bool RenderViewSystem::Initialize(IRenderer* renderer, SRenderViewSystemConfig c
 	Renderer = renderer;
 
 	// Fill the array with invalid entries.
-	RegisteredViews.resize(MaxViewCount);
+	RegisteredViews.Resize(MaxViewCount);
 	for (uint32_t i = 0; i < MaxViewCount; ++i) {
 		RegisteredViews[i] = nullptr;
 	}
@@ -51,25 +51,25 @@ bool RenderViewSystem::Initialize(IRenderer* renderer, SRenderViewSystemConfig c
 
 void RenderViewSystem::Shutdown() {
 	// Renderview
-	for (uint32_t i = 0; i < RegisteredViews.size(); ++i) {
+	for (uint32_t i = 0; i < RegisteredViews.Size(); ++i) {
 		IRenderView* View = RegisteredViews[i];
 		if (View == nullptr) {
 			continue;
 		}
 
 		// Renderpass & Rendertarget
-		for (uint32_t j = 0; j < View->Passes.size(); ++j) {
+		for (uint32_t j = 0; j < View->Passes.Size(); ++j) {
 			for (uint32_t t = 0; t < View->Passes[j].RenderTargetCount; ++t) {
 				Renderer->DestroyRenderTarget(&View->Passes[j].Targets[t], true);
 			}
-			View->Passes[j].Targets.clear();
+			View->Passes[j].Targets.Clear();
 			View->Passes[j].Destroy();
 		}
-		RegisteredViews[i]->Passes.clear();
+		RegisteredViews[i]->Passes.Clear();
 		RegisteredViews[i]->OnDestroy();
 	}
-	RegisteredViews.clear();
-	std::vector<IRenderView*>().swap(RegisteredViews);
+	RegisteredViews.Clear();
+	RegisteredViews.Empty();
 }
 
 bool RenderViewSystem::Create(const RenderViewConfig& config) {
@@ -84,7 +84,7 @@ bool RenderViewSystem::Create(const RenderViewConfig& config) {
 	}
 
 	uint16_t ID = INVALID_ID_U16;
-	if (RegisteredViewMap.find(config.type) != RegisteredViewMap.end()){
+	if (RegisteredViewMap.Contains(config.type)){
 		GLOG(Log::eError, "RenderViewSystem::Create() A view of type '%d' already exists. A new one will not be created.", config.type);
 		return false;
 	}
@@ -148,12 +148,15 @@ void RenderViewSystem::RegenerateRendertargets(IRenderView* view) {
 		IRenderpass* Pass = &view->Passes[r];
 
 		for (unsigned char i = 0; i < Pass->RenderTargetCount; ++i) {
+			// 告知视图当前重建的是哪一个渲染目标，供其为多缓冲资源（G-Buffer 套件、阴影贴图）选对下标
+			view->RegeneratingTargetIndex = (uint32_t)i;
+
 			RenderTarget* Target = &Pass->Targets[i];
 			// Destroy the old if exists.
 			// TODO: check if a resize is actually needed for this target.
 			Renderer->DestroyRenderTarget(Target, false);
 
-			unsigned char AttachCount = (unsigned char)Target->attachments.size();
+			unsigned char AttachCount = (unsigned char)Target->attachments.Size();
 			for (uint32_t a = 0; a < AttachCount; ++a) {
 				RenderTargetAttachment* Attachment = &Target->attachments[a];
 				if (Attachment->source == RenderTargetAttachmentSource::eRender_Target_Attachment_Source_Default) {
@@ -186,7 +189,7 @@ void RenderViewSystem::RegenerateRendertargets(IRenderView* view) {
 
 void RenderViewSystem::OnWindowResize(uint32_t width, uint32_t height) {
 	// Send to all view.
-	for (uint32_t i = 0; i < RegisteredViews.size(); ++i) {
+	for (uint32_t i = 0; i < RegisteredViews.Size(); ++i) {
 		if (RegisteredViews[i]) {
 			RegisteredViews[i]->OnResize(width, height);
 		}
@@ -195,7 +198,7 @@ void RenderViewSystem::OnWindowResize(uint32_t width, uint32_t height) {
 
 IRenderView* RenderViewSystem::Get(ERenderViewType Type) {
 	if (Initialized) {
-		if (RegisteredViewMap.find(Type) == RegisteredViewMap.end()){
+		if (!RegisteredViewMap.Contains(Type)){
 			GLOG(Log::eDebug, "Can not find render view of type '%d', return nullptr.", Type);
 			return nullptr;
 		}
@@ -212,7 +215,7 @@ IRenderView* RenderViewSystem::Get(ERenderViewType Type) {
 }
 
 bool RenderViewSystem::LoadRenderviewConfig(const FString& path) {
-	std::vector<RenderViewConfig> RenderviewConfigs;
+	TArray<RenderViewConfig> RenderviewConfigs;
 
 	FString ConfigFilePath = path.IsEmpty() ?
 		FString(ROOT_PATH) + FString("/Configs/RenderViews.json") : path;
@@ -226,7 +229,7 @@ bool RenderViewSystem::LoadRenderviewConfig(const FString& path) {
 	JsonObject Root(ConfigFile);
 
 	// ---- 字符串 → 枚举的辅助 lambda ----
-	auto ParseType = [](const std::string& s) {
+	auto ParseType = [](const FString& s) {
 		if (s == "Skybox")   return ERenderViewType::Skybox;
 		if (s == "Deferred") return ERenderViewType::Deferred;
 		if (s == "UI")       return ERenderViewType::UI;
@@ -234,26 +237,26 @@ bool RenderViewSystem::LoadRenderviewConfig(const FString& path) {
 		return ERenderViewType::Unknown;
 		};
 
-	auto ParseAttachType = [](const std::string& s) {
+	auto ParseAttachType = [](const FString& s) {
 		if (s == "Color") return RenderTargetAttachmentType::eRender_Target_Attachment_Type_Color;
 		if (s == "Depth") return RenderTargetAttachmentType::eRender_Target_Attachment_Type_Depth;
 		return RenderTargetAttachmentType::eRender_Target_Attachment_Type_Color;
 		};
 
-	auto ParseSource = [](const std::string& s) {
+	auto ParseSource = [](const FString& s) {
 		if (s == "Default") return RenderTargetAttachmentSource::eRender_Target_Attachment_Source_Default;
 		if (s == "View")    return RenderTargetAttachmentSource::eRender_Target_Attachment_Source_View;
 		return RenderTargetAttachmentSource::eRender_Target_Attachment_Source_Default;
 		};
 
-	auto ParseLoadOp = [](const std::string& s) {
+	auto ParseLoadOp = [](const FString& s) {
 		if (s == "DontCare") return RenderTargetAttachmentLoadOperation::eRender_Target_Attachment_Load_Operation_DontCare;
 		if (s == "Load")     return RenderTargetAttachmentLoadOperation::eRender_Target_Attachment_Load_Operation_Load;
 		if (s == "Clear")    return RenderTargetAttachmentLoadOperation::eRender_Target_Attachment_Load_Operation_Clear;
 		return RenderTargetAttachmentLoadOperation::eRender_Target_Attachment_Load_Operation_DontCare;
 		};
 
-	auto ParseStoreOp = [](const std::string& s) {
+	auto ParseStoreOp = [](const FString& s) {
 		if (s == "Store")   return RenderTargetAttachmentStoreOperation::eRender_Target_Attachment_Store_Operation_Store;
 		if (s == "DontCare")return RenderTargetAttachmentStoreOperation::eRender_Target_Attachment_Store_Operation_DontCare;
 		return RenderTargetAttachmentStoreOperation::eRender_Target_Attachment_Store_Operation_Store;
@@ -262,7 +265,7 @@ bool RenderViewSystem::LoadRenderviewConfig(const FString& path) {
 	auto ParseClearFlags = [](const JsonObject& flagsArr) {
 		uint8_t result = RenderpassClearFlags::eRenderpass_Clear_None;
 		for (size_t i = 0; i < flagsArr.Size(); ++i) {
-			std::string f = flagsArr.ArrayItemAt(i).ReadString();
+			FString f = FString(flagsArr.ArrayItemAt(i).ReadString().c_str());
 			if (f == "Color")   result = result | RenderpassClearFlags::eRenderpass_Clear_Color_Buffer;
 			if (f == "Depth")   result = result | RenderpassClearFlags::eRenderpass_Clear_Depth_Buffer;
 			if (f == "Stencil") result = result | RenderpassClearFlags::eRenderpass_Clear_Stencil_Buffer;
@@ -282,14 +285,14 @@ bool RenderViewSystem::LoadRenderviewConfig(const FString& path) {
 
 		RenderViewConfig ViewConfig;
 		ViewConfig.name = ViewJson.ReadString("name").c_str();
-		ViewConfig.type = ParseType(ViewJson.ReadString("type"));
+		ViewConfig.type = ParseType(FString(ViewJson.ReadString("type").c_str()));
 		ViewConfig.width = Cast<unsigned short>(FramebufferWidth);
 		ViewConfig.height = Cast<unsigned short>(FramebufferHeight);
 		ViewConfig.view_matrix_source = RenderViewViewMatrixtSource::eRender_View_View_Matrix_Source_Scene_Camera;
 
 		JsonObject PassesArr = ViewJson.Read("passes");
 		size_t PassCount = PassesArr.Size();
-		std::vector<RenderpassConfig> Passes(PassCount);
+		TArray<RenderpassConfig> Passes(PassCount);
 
 		for (size_t pi = 0; pi < PassCount; ++pi) {
 			JsonObject PassJson = PassesArr.ArrayItemAt(pi);
@@ -317,14 +320,14 @@ bool RenderViewSystem::LoadRenderviewConfig(const FString& path) {
 				RenderTargetAttachmentConfig Attach;
 				Memory::Zero(&Attach, sizeof(Attach));
 
-				Attach.type = ParseAttachType(AJson.ReadString("type"));
-				Attach.source = ParseSource(AJson.ReadString("source"));
-				Attach.loadOperation = ParseLoadOp(AJson.ReadString("load_op"));
-				Attach.storeOperation = ParseStoreOp(AJson.ReadString("store_op"));
+				Attach.type = ParseAttachType(FString(AJson.ReadString("type").c_str()));
+				Attach.source = ParseSource(FString(AJson.ReadString("source").c_str()));
+				Attach.loadOperation = ParseLoadOp(FString(AJson.ReadString("load_op").c_str()));
+				Attach.storeOperation = ParseStoreOp(FString(AJson.ReadString("store_op").c_str()));
 				Attach.presentAfter = AJson.ReadBool("present_after", false);
 				Attach.index = (uint32_t)AJson.ReadInt("index", 0);
 
-				Pass.target.attachments.push_back(Attach);
+				Pass.target.attachments.Push(Attach);
 			}
 		}
 

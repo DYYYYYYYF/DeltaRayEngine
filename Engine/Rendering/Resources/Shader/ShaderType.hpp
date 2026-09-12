@@ -132,6 +132,12 @@ enum class ShaderSemantic {
 	eShaderSemantic_Time,
 	eShaderSemantic_RenderMode,
 	eShaderSemantic_LightSpaceMatrix,
+	// 方向光（由场景中的光照 Actor 提供，Global 段）
+	eShaderSemantic_LightDirection,
+	eShaderSemantic_LightColor,
+	eShaderSemantic_LightIntensity,
+	eShaderSemantic_ShadowBias,
+	eShaderSemantic_ShadowStrength,
 
 	// Dynamic Instance
 	eSemantic_GBuffer_Albedo,
@@ -195,6 +201,13 @@ struct FFrameData {
 	// 阴影映射（Shadow Mapping）
 	Matrix4 lightSpaceMatrix;
 	FTextureMap* shadowMap = nullptr;
+
+	// 方向光光照参数（由场景中的方向光 Actor 配置，逐帧填充后上传到全局 Uniform）
+	Vector4 lightDirection;   // xyz = 光源指向场景的单位方向，w 保留
+	Vector4 lightColor;       // 光源颜色（rgba）
+	Vector4 lightIntensity;   // (I, I, I, I)，用 w 便于着色器整体缩放
+	float shadowBias;         // 阴影深度偏置
+	float shadowStrength;     // 阴影强度：投射阴影为 1，否则为 0
 };
 
 struct ShaderAttribute {
@@ -237,9 +250,9 @@ public:
 	PolygonMode polygon_mode;
 	PrimitiveTopology PrimTopo;
 
-	std::vector<ShaderAttributeConfig> attributes;
-	std::vector<ShaderUniformConfig> uniforms;
-	std::vector<ShaderStage> stages;
+	TArray<ShaderAttributeConfig> attributes;
+	TArray<ShaderUniformConfig> uniforms;
+	TArray<ShaderStage> stages;
 	TArray<FString> stage_names;
 	TArray<FString> stage_filenames;
 

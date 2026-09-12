@@ -47,8 +47,8 @@ public:
 	virtual bool SetUniform(const FString& name, const void* value) = 0;
 	virtual bool SetUniform(const ShaderUniform* uniform, const void* value) = 0;
 	
-	virtual void ProcessAttributes(const std::vector<ShaderAttributeConfig>& attributes);
-	virtual void ProcessUniforms(const std::vector<ShaderUniformConfig>& uniforms);
+	virtual void ProcessAttributes(const TArray<ShaderAttributeConfig>& attributes);
+	virtual void ProcessUniforms(const TArray<ShaderUniformConfig>& uniforms);
 
 	virtual void AddAttribute(const ShaderAttributeConfig& config);
 	virtual void AddSampler(const ShaderUniformConfig& config);
@@ -72,11 +72,11 @@ public:
 	 */
 	ShaderUniform* GetUniformHandle(const FString& name);
 
-	const std::vector<ShaderUniform>& GetUniformList() const { return Uniforms; }
+	const TArray<ShaderUniform>& GetUniformList() const { return Uniforms; }
 
 protected:
 	// Shader utils
-	std::vector<uint32_t> CompileShaderToSPV(const FString& filename, enum ShaderStage shaderStage, bool writeToDisk = true);
+	TArray<uint32_t> CompileShaderToSPV(const FString& filename, enum ShaderStage shaderStage, bool writeToDisk = true);
 	virtual void SetupCompileOptions(shaderc::CompileOptions& options) {}
 
 private:
@@ -120,8 +120,8 @@ public:
 	uint32_t InstanceTextureCount = 0;
 
 	// Uniform / Attribute 表
-	std::vector<ShaderUniform>              Uniforms;
-	std::vector<ShaderAttribute>            Attributes;
-	std::vector<FTextureMap*>                GlobalTextureMaps;
-	std::unordered_map<FString, uint32_t>   HashMap;
+	TArray<ShaderUniform>              Uniforms;
+	TArray<ShaderAttribute>            Attributes;
+	TArray<FTextureMap*>                GlobalTextureMaps;
+	TMap<FString, uint32_t>   HashMap;
 };

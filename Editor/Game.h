@@ -17,6 +17,7 @@
 
 class DebugConsoleActor;
 class ACameraActor;
+class ADirectionalLightActor;
 
 class GameInstance : public IGame {
 public:
@@ -34,6 +35,8 @@ public:
 public:
 	ACameraActor* WorldCamera;
 	DebugConsoleActor* GameConsole;
+	// 方向光 Actor：Initialize 中创建，Shutdown 时把光照配置写回 Editor/Config.json
+	ADirectionalLightActor* DirectionalLightActor = nullptr;
 
 	// TODO: temp
 	Keymap* ConsoleKeymap;

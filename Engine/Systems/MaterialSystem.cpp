@@ -33,7 +33,7 @@ bool MaterialSystem::Initialize(IRenderer* renderer, SMaterialSystemConfig confi
 
 	// Invalidate all textures in the array.
 	uint32_t Count = MaterialSystemConfig.max_material_count;
-	RegisteredMaterials.resize(Count);
+	RegisteredMaterials.Resize(Count);
 
 	Initilized = true;
 	return true;
@@ -47,8 +47,8 @@ void MaterialSystem::Shutdown() {
 			m = nullptr;
 		}
 	};
-	RegisteredMaterials.clear();
-	MaterialMap.clear();
+	RegisteredMaterials.Clear();
+	MaterialMap.Clear();
 }
 
 UMaterial* MaterialSystem::Acquire(const FString& name) {
@@ -78,7 +78,7 @@ UMaterial* MaterialSystem::Acquire(const FString& name) {
 
 UMaterial* MaterialSystem::AcquireFromConfig(FMaterialConfig config) {
 	// 如果找不到材质，则创建一个新的材质。
-	if (MaterialMap.find(config.name) == MaterialMap.end()) {
+	if (!MaterialMap.Contains(config.name)) {
 		uint32_t Count = MaterialSystemConfig.max_material_count;
 		UMaterial* m = nullptr;
 		for (uint32_t i = 0; i < Count; ++i) {
@@ -121,9 +121,9 @@ UMaterial* MaterialSystem::AcquireFromConfig(FMaterialConfig config) {
 
 
 	// TODO:这里实际上是创建了一个独立的DescriptorSet，后续需要移动到Material中，不应该存在shader中。
-	std::vector<FTextureMap*> Maps;
+	TArray<FTextureMap*> Maps;
 	for (TextureBinding& TexBinding : Mat->TextureBindings) {
-		Maps.push_back(&(TexBinding.texture));
+		Maps.Push(&(TexBinding.texture));
 	}
 
 	UShader* s = ShaderSystem::Get().Get(config.shader_name);
@@ -157,7 +157,7 @@ bool MaterialSystem::LoadMaterial(FMaterialConfig config, UMaterial* mat) {
 	}
 
 	// 由Shader反射具体Property后在config中查找
-	const std::vector<ShaderUniform>& Uniforms = s->GetUniformList();
+	const TArray<ShaderUniform>& Uniforms = s->GetUniformList();
 	for (const ShaderUniform& uniform: Uniforms) {
 		switch (uniform.scope)
 		{
@@ -256,14 +256,14 @@ void MaterialSystem::DestroyMaterial(UMaterial* mat) {
 	}
 
 	// Remove from the registered materials list.
-	if (MaterialMap.find(mat->Name) != MaterialMap.end())
+	if (MaterialMap.Contains(mat->Name))
 	{
 		uint32_t MaterialID = MaterialMap[mat->Name];
 		RegisteredMaterials[MaterialID] = nullptr;
 		GLOG(Log::eInfo, "Released material '%s'. Material unloaded.", mat->Name.CStr());
 
 		// Update the entry.
-		MaterialMap.erase(mat->Name);
+		MaterialMap.Remove(mat->Name);
 	}
 
 	// Delete the material object.
@@ -363,7 +363,7 @@ bool MaterialSystem::ApplyGlobal(uint32_t shader_id, size_t renderer_frame_numbe
 		return true;
 	}
 
-	const std::vector<ShaderUniform>& uniforms = UsedShader->GetUniformList();
+	const TArray<ShaderUniform>& uniforms = UsedShader->GetUniformList();
 	for (const ShaderUniform& uniform : uniforms) {
 		if (uniform.scope != eShader_Scope_Global) continue;
 
@@ -395,6 +395,27 @@ bool MaterialSystem::ApplyGlobal(uint32_t shader_id, size_t renderer_frame_numbe
 
 		case ShaderSemantic::eShaderSemantic_LightSpaceMatrix:
 			MATERIAL_APPLY_OR_FAIL(UsedShader->SetUniform(&uniform, &data.lightSpaceMatrix));
+			break;
+
+		// 方向光光照参数：统一来自场景中的方向光 Actor，经帧数据上传到全局 Uniform
+		case ShaderSemantic::eShaderSemantic_LightDirection:
+			MATERIAL_APPLY_OR_FAIL(UsedShader->SetUniform(&uniform, &data.lightDirection));
+			break;
+
+		case ShaderSemantic::eShaderSemantic_LightColor:
+			MATERIAL_APPLY_OR_FAIL(UsedShader->SetUniform(&uniform, &data.lightColor));
+			break;
+
+		case ShaderSemantic::eShaderSemantic_LightIntensity:
+			MATERIAL_APPLY_OR_FAIL(UsedShader->SetUniform(&uniform, &data.lightIntensity));
+			break;
+
+		case ShaderSemantic::eShaderSemantic_ShadowBias:
+			MATERIAL_APPLY_OR_FAIL(UsedShader->SetUniform(&uniform, &data.shadowBias));
+			break;
+
+		case ShaderSemantic::eShaderSemantic_ShadowStrength:
+			MATERIAL_APPLY_OR_FAIL(UsedShader->SetUniform(&uniform, &data.shadowStrength));
 			break;
 
 		default:
@@ -526,7 +547,7 @@ bool MaterialSystem::ApplyLocal(UShader* shader, const Matrix4& model) {
 	}
 
 	// 使用传入shader的本地uniform列表来设置模型矩阵
-	const std::vector<ShaderUniform>& uniforms = shader->GetUniformList();
+	const TArray<ShaderUniform>& uniforms = shader->GetUniformList();
 	for (const ShaderUniform& uniform : uniforms)
 	{
 		if (uniform.scope != eShader_Scope_Local) continue;

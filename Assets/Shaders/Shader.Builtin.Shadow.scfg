@@ -14,7 +14,16 @@ depth_write=1
 polygon_mode=fill
 
 # Attributes: type,name
+# 必须完整覆盖 Vertex 结构的全部字段：position(12) + normal(12) + texcoord(8) + color(16) + tangent(16) = 64 字节。
+# 顶点步长由 Shader.cpp 对本列表逐项累加得出，与着色器实际消费哪些输入无关；
+# 若只声明 vec3,in_position，步长会退化为 12 字节，而阴影通道与 G-Buffer 通道共用同一批
+# 顶点缓冲（真实步长 sizeof(Vertex)=64），顶点位置将按错误偏移解析，阴影贴图内容失效。
+# 因此未被阴影着色器消费的属性也必须显式声明为占位。
 attribute=vec3,in_position
+attribute=vec3,in_normal
+attribute=vec2,in_texcoord
+attribute=vec4,in_color
+attribute=vec4,in_tangent
 
 # Uniforms: type,scope,name
 # NOTE: For scope: 0=global, 1=instance, 2=local

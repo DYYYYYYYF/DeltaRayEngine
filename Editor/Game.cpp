@@ -14,6 +14,7 @@
 #include "GameLogic/LogicActors/RotationCubeActor.h"
 #include "Framework/Components/CameraComponent.h"
 #include "Framework/Classes/SkyboxActor.h"
+#include "Framework/Classes/DirectionalLightActor.h"
 
 bool GameOnEvent(eEventCode code, void* sender, void* listender_inst, SEventContext context) {
 	switch (code)
@@ -168,6 +169,14 @@ bool GameInstance::Initialize() {
 		World->AddActor(SkyboxActor);
 	}
 
+	// 方向光 Actor：阴影通道与延迟光照通道的光照参数统一由它配置
+	// （方向/颜色/强度/环境光/阴影偏置与光锥参数，构造时自动注册进 LightSystem）
+	DirectionalLightActor = NewObject<ADirectionalLightActor>("DirectionalLight");
+	if (DirectionalLightActor) {
+		DirectionalLightActor->LoadFromConfig(Content);
+		World->AddActor(DirectionalLightActor);
+	}
+
 	// World meshes
 	ARotationCubeActor* CubeMesh = NewObject<ARotationCubeActor>("TestCube");
 	CubeMesh->SetActorLocation(Vector(0.0f, 0.0f, 0.0f));
@@ -210,29 +219,34 @@ void GameInstance::BeginPlay() {
 }
 
 void GameInstance::Shutdown() {
+	// 序列化数据（必须在 World 销毁前完成：相机与方向光 Actor 的组件此时仍然有效）
+	File MaterialAsset(EDITOR_CONFIG_PATH);
+	if (MaterialAsset.IsExist()) {
+		UCameraComponent* CameraComp = WorldCamera ? WorldCamera->GetCameraComponent() : nullptr;
+		if (!CameraComp) {
+			GLOG(Log::eError, "GameInstance::Shutdown: camera component is nullptr.");
+		}
+
+		JsonObject Content = JsonObject(MaterialAsset);
+		Content.WriteInt("Window.Width", (int)WindowSize.Width);
+		Content.WriteInt("Window.Height", (int)WindowSize.Height);
+		if (CameraComp) {
+			Content.WriteVector3("Camera.Position", CameraComp->GetPosition());
+			Content.WriteVector3("Camera.Rotation", CameraComp->GetEulerAngles());
+		}
+
+		// 方向光配置（方向/颜色/强度/环境光/阴影）写回 Editor/Config.json，下次启动即可复用
+		if (DirectionalLightActor) {
+			DirectionalLightActor->SaveToConfig(Content);
+		}
+
+		Content.SaveToFile(MaterialAsset);
+	}
+
 	if (World) {
 		// Actor示例由World清空
 		World->Destroy();
 	}
-
-	// 序列化数据
-	File MaterialAsset(EDITOR_CONFIG_PATH);
-	if (!MaterialAsset.IsExist()) {
-		return;
-	}
-
-	UCameraComponent* CameraComp = WorldCamera->GetCameraComponent();
-	if (!CameraComp) {
-		GLOG(Log::eError, "RenderViewSkybox::OnBuildPacke() Camera is nullptr.");
-		return;
-	}
-
-	JsonObject Content = JsonObject(MaterialAsset);
-	Content.WriteInt("Window.Width", (int)WindowSize.Width);
-	Content.WriteInt("Window.Height", (int)WindowSize.Height);
-	Content.WriteVector3("Camera.Position", CameraComp->GetPosition());
-	Content.WriteVector3("Camera.Rotation", CameraComp->GetEulerAngles());
-	Content.SaveToFile(MaterialAsset);
 
 	// TODO: TEMP
 	EngineEvent::Unregister(eEventCode::Debug_0, this, GameOnDebugEvent);

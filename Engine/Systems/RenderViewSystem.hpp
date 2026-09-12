@@ -34,6 +34,6 @@ private:
 	IRenderer* Renderer;
 	uint16_t MaxViewCount;
 
-	std::vector<IRenderView*> RegisteredViews;
-	std::unordered_map<ERenderViewType, uint16_t> RegisteredViewMap;
+	TArray<IRenderView*> RegisteredViews;
+	TMap<ERenderViewType, uint16_t> RegisteredViewMap;
 };

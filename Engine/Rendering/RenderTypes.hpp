@@ -55,7 +55,7 @@ struct RenderTargetAttachmentConfig {
 };
 
 struct RenderTargetConfig {
-	std::vector<RenderTargetAttachmentConfig> attachments;
+	TArray<RenderTargetAttachmentConfig> attachments;
 };
 
 struct RenderTargetAttachment {
@@ -82,12 +82,12 @@ struct SRenderViewPassConfig {
 struct SRenderPacket {
 	double delta_time = 0.0;
 	unsigned short view_count = 0;
-	std::vector<struct RenderViewPacket> views;
+	TArray<struct RenderViewPacket> views;
 };
 
 struct RenderTarget {
 	bool sync_to_window_size = true;
-	std::vector<struct RenderTargetAttachment> attachments;
+	TArray<struct RenderTargetAttachment> attachments;
 	void* internal_framebuffer = nullptr;
 };
 
@@ -136,7 +136,7 @@ public:
 		Meshes = data.Meshes;
 	}
 
-	std::vector<GeometryRenderData> Meshes;
+	TArray<GeometryRenderData> Meshes;
 	float GlobalTime;
 };
 
@@ -171,7 +171,7 @@ public:
 		Texts = data.Texts;
 	}
 
-	std::vector<GeometryRenderData> WorldMeshData;
+	TArray<GeometryRenderData> WorldMeshData;
 	MeshPacketData UIMeshData;
 	uint32_t UIGeometryCount = 0;
 	// TODO: Temp.

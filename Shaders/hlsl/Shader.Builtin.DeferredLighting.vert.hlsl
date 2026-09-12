@@ -4,7 +4,14 @@
 struct GlobalUniformObject
 {
     float4x4 light_space_matrix;
+    // 以下光照参数全部由场景中的方向光 Actor 配置，经全局 UBO 上传
+    float4 ambient_color;
+    float4 light_direction;
+    float4 light_color;
+    float4 light_intensity;
     float global_time;
+    float shadow_bias;
+    float shadow_strength;
 };
 
 // 顶点着色器输入（全屏四边形）
@@ -59,7 +66,8 @@ VSOutput main(VSInput input)
     
     // 传递数据
     output.out_time = GlobalUBO.global_time;
-    output.ambient_color = float4(0.18, 0.18, 0.18, 1.0);
+    // 环境光由光照 Actor 通过全局 UBO 提供
+    output.ambient_color = GlobalUBO.ambient_color;
     output.view_position = float3(0, 0, 0); // 需要从别处获取
     
     return output;

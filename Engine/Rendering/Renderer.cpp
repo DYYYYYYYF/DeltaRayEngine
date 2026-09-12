@@ -159,7 +159,7 @@ bool IRenderer::DrawFrame(UWorld* World) {
 }
 
 void IRenderer::ExecuteDrawCalls(
-	const std::vector<DrawCall>& draw_calls, size_t frame_number, const FFrameData& data) {
+	const TArray<DrawCall>& draw_calls, size_t frame_number, const FFrameData& data) {
 	RHI_->ExecuteDrawCalls(draw_calls, frame_number, data);
 }
 
@@ -203,7 +203,7 @@ bool IRenderer::EndRenderpass(IRenderpass* pass) {
 	return RHI_->EndRenderpass(pass);
 }
 
-bool IRenderer::CreateRenderShader(UShader* shader, const FShaderConfig* config, IRenderpass* pass, const TArray<FString>& stage_filenames, std::vector<ShaderStage> stages) {
+bool IRenderer::CreateRenderShader(UShader* shader, const FShaderConfig* config, IRenderpass* pass, const TArray<FString>& stage_filenames, TArray<ShaderStage> stages) {
 	return RHI_->CreateShader(shader, config, pass, stage_filenames, stages);
 }
 
@@ -215,7 +215,7 @@ bool IRenderer::InitializeRenderShader(UShader* shader) {
 	return shader->Initialize();
 }
 
-uint32_t IRenderer::AcquireInstanceResource(UShader* shader, std::vector<FTextureMap*> maps) {
+uint32_t IRenderer::AcquireInstanceResource(UShader* shader, TArray<FTextureMap*> maps) {
 	return RHI_->AcquireInstanceResource(shader, maps);
 }
 
@@ -231,7 +231,7 @@ void IRenderer::ReleaseTextureMap(FTextureMap* map) {
 	RHI_->ReleaseTextureMap(map);
 }
 
-bool IRenderer::CreateRenderTarget(unsigned char attachment_count, std::vector<RenderTargetAttachment> attachments, IRenderpass* pass, uint32_t width, uint32_t height, RenderTarget* out_target) {
+bool IRenderer::CreateRenderTarget(unsigned char attachment_count, TArray<RenderTargetAttachment> attachments, IRenderpass* pass, uint32_t width, uint32_t height, RenderTarget* out_target) {
 	return RHI_->CreateRenderTarget(attachment_count, attachments, pass, width, height, out_target);
 }
 

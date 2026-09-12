@@ -785,7 +785,7 @@ void VulkanRHI::DrawGeometry(GeometryRenderData* geometry) {
 	}
 }
 
-void VulkanRHI::ExecuteDrawCalls(const std::vector<DrawCall>& draw_calls,
+void VulkanRHI::ExecuteDrawCalls(const TArray<DrawCall>& draw_calls,
 	size_t frame_number, const FFrameData& data) {
 	// 每个DrawCall重置
 	UShader* currentShader = nullptr;
@@ -880,10 +880,10 @@ bool VulkanRHI::VerifyShaderID(uint32_t shader_id) {
 #endif	// LEVEL_DEBUG
 
 bool VulkanRHI::CreateShader(UShader* shader, const FShaderConfig* config, IRenderpass* pass,
-	const TArray<FString>& stage_filenames, std::vector<ShaderStage>& stages) {
+	const TArray<FString>& stage_filenames, TArray<ShaderStage>& stages) {
 	// Translate stages.
 	vk::ShaderStageFlags VkStages[VULKAN_SHADER_MAX_STAGES];
-	for (unsigned short i = 0; i < stages.size(); ++i) {
+	for (unsigned short i = 0; i < stages.Size(); ++i) {
 		switch (stages[i])
 		{
 		case eShader_Stage_Fragment:
@@ -915,7 +915,7 @@ bool VulkanRHI::CreateShader(UShader* shader, const FShaderConfig* config, IRend
 	// Shader stages. Parse out the flags.
 	Memory::Zero(OutShader->Config.stages, sizeof(VulkanShaderStageConfig) * VULKAN_SHADER_MAX_STAGES);
 	OutShader->Config.stage_count = 0;
-	for (uint32_t i = 0; i < stages.size(); ++i) {
+	for (uint32_t i = 0; i < stages.Size(); ++i) {
 		// Make sure there is room enough to add the stage.
 		if (OutShader->Config.stage_count + 1 > VULKAN_SHADER_MAX_STAGES) {
 			GLOG(Log::eError, "Shaders may have a maximum of %d stages", VULKAN_SHADER_MAX_STAGES);
@@ -964,7 +964,7 @@ bool VulkanRHI::CreateShader(UShader* shader, const FShaderConfig* config, IRend
 	OutShader->InstanceUniformCount = 0;
 	OutShader->InstanceUniformSamplerCount = 0;
 	OutShader->LocalUniformCount = 0;
-	uint32_t TotalCount = (uint32_t)config->uniforms.size();
+	uint32_t TotalCount = (uint32_t)config->uniforms.Size();
 	for (uint32_t i = 0; i < TotalCount; ++i) {
 		switch (config->uniforms[i].scope) {
 		case ShaderScope::eShader_Scope_Global:
@@ -1136,7 +1136,7 @@ void VulkanRHI::ReleaseTextureMap(FTextureMap* map) {
 	}
 }
 
-uint32_t VulkanRHI::AcquireInstanceResource(UShader* shader, std::vector<FTextureMap*>& maps) {
+uint32_t VulkanRHI::AcquireInstanceResource(UShader* shader, TArray<FTextureMap*>& maps) {
 	VulkanShader* VkShader = (VulkanShader*)shader;
 	// TODO: Dynamic
 	uint32_t OutInstanceID = INVALID_ID;
@@ -1229,11 +1229,11 @@ bool VulkanRHI::ReleaseInstanceResource(UShader* shader, uint64_t instance_id) {
 	// Destroy descriptor states.
 	Memory::Zero(InstanceState->descriptor_set_state.descriptor_states, sizeof(VulkanDescriptorState) * VULKAN_SHADER_MAX_BINDINGS);
 
-	if (InstanceState->instance_texture_maps.size() > 0) {
-		for (uint32_t i = 0; i < InstanceState->instance_texture_maps.size(); ++i) {
+	if (InstanceState->instance_texture_maps.Size() > 0) {
+		for (uint32_t i = 0; i < InstanceState->instance_texture_maps.Size(); ++i) {
 			InstanceState->instance_texture_maps[i]->texture = nullptr;
 		}
-		InstanceState->instance_texture_maps.clear();
+		InstanceState->instance_texture_maps.Clear();
 	}
 
 	VkShader->UniformBuffer.FreeMemory(shader->UboStride, InstanceState->offset);
@@ -1243,16 +1243,16 @@ bool VulkanRHI::ReleaseInstanceResource(UShader* shader, uint64_t instance_id) {
 	return true;
 }
 
-bool VulkanRHI::CreateRenderTarget(unsigned char attachment_count, std::vector<RenderTargetAttachment> attachments, IRenderpass* pass, uint32_t width, uint32_t height, RenderTarget* out_target) {
+bool VulkanRHI::CreateRenderTarget(unsigned char attachment_count, TArray<RenderTargetAttachment> attachments, IRenderpass* pass, uint32_t width, uint32_t height, RenderTarget* out_target) {
 	// Max number of attachments.
 	vk::ImageView AttachmentViews[32];
 	for (uint32_t i = 0; i < attachment_count; ++i) {
 		AttachmentViews[i] = ((VulkanTexture*)attachments[i].texture)->ImageView;
 	}
 
-	out_target->attachments.clear();
-	for (uint32_t i = 0; i < attachments.size(); ++i) {
-		out_target->attachments.push_back(attachments[i]);
+	out_target->attachments.Clear();
+	for (uint32_t i = 0; i < attachments.Size(); ++i) {
+		out_target->attachments.Push(attachments[i]);
 	}
 
 	vk::FramebufferCreateInfo FramebufferCreateInfo;
@@ -1277,7 +1277,7 @@ void  VulkanRHI::DestroyRenderTarget(RenderTarget* target, bool free_internal_me
 		Context.Device.GetLogicalDevice().destroyFramebuffer(*(vk::Framebuffer*)&target->internal_framebuffer, Context.Allocator);
 		target->internal_framebuffer = nullptr;
 		if (free_internal_memory) {
-			target->attachments.clear();
+			target->attachments.Clear();
 			Memory::Zero(target, sizeof(RenderTarget));
 		}
 	}
@@ -1313,7 +1313,7 @@ unsigned char VulkanRHI::GetWindowAttachmentCount() const {
 bool VulkanRHI::CreateRenderpass(IRenderpass* out_renderpass, const RenderpassConfig& config) {
 
 	out_renderpass->RenderTargetCount = config.renderTargetCount;
-	out_renderpass->Targets.resize(out_renderpass->RenderTargetCount);
+	out_renderpass->Targets.Resize(out_renderpass->RenderTargetCount);
 	out_renderpass->SetClearColor(config.clear_color);
 	out_renderpass->SetClearFlags(config.clear_flags);
 	out_renderpass->SetRenderArea(config.render_area);
@@ -1321,10 +1321,10 @@ bool VulkanRHI::CreateRenderpass(IRenderpass* out_renderpass, const RenderpassCo
 	// Copy over config for each target.
 	for (uint32_t i = 0; i < out_renderpass->RenderTargetCount; ++i) {
 		RenderTarget* Target = &out_renderpass->Targets[i];
-		Target->attachments.resize(config.target.attachments.size());
+		Target->attachments.Resize(config.target.attachments.Size());
 
 		// Each attachment for the target.
-		for (uint32_t a = 0; a < Target->attachments.size(); ++a) {
+		for (uint32_t a = 0; a < Target->attachments.Size(); ++a) {
 			RenderTargetAttachment* Attachment = &Target->attachments[a];
 			const RenderTargetAttachmentConfig* AttachmentConfig = &config.target.attachments[a];
 

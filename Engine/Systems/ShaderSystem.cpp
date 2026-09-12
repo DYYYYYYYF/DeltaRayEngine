@@ -69,7 +69,7 @@ void ShaderSystem::Shutdown() {
 			std::bind(&ShaderSystem::OnReloadShader, this, std::placeholders::_1, std::placeholders::_2,
 				std::placeholders::_3, std::placeholders::_4));
 
-		ShaderMap.clear();
+		ShaderMap.Clear();
 
 		// Save current config
 		File MaterialAsset(ENGINE_CONFIG_PATH);
@@ -78,8 +78,8 @@ void ShaderSystem::Shutdown() {
 		}
 
 		JsonObject Content = JsonObject(MaterialAsset);
-		std::string Lan = GLOBAL_SHADER_TYPE == EShaderLanguage::eGLSL ? "glsl" : "hlsl";
-		Content.WriteString("renderer.shader_language", Lan);
+		const char* Lan = GLOBAL_SHADER_TYPE == EShaderLanguage::eGLSL ? "glsl" : "hlsl";
+		Content.WriteString("renderer.shader_language", std::string(Lan));
 		Content.SaveToFile(MaterialAsset);
 	}
 }
@@ -228,10 +228,10 @@ UShader* ShaderSystem::Get(const FString& shader_name) {
 }
 
 uint32_t ShaderSystem::GetShaderID(const FString& shader_name) {
-	auto it = ShaderMap.find(shader_name);
-	if (it == ShaderMap.end()){
+	uint32_t* it = ShaderMap.Find(shader_name);
+	if (it == nullptr){
 		return INVALID_ID;
 	}
 
-	return it->second;
+	return *it;
 }

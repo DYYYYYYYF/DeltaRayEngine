@@ -63,7 +63,7 @@ bool VulkanPipeline::Create(VulkanContext* context, const VulkanPipelineConfig& 
 	}
 
 	uint32_t ColorAttachmentCount = 0;
-	uint32_t AttachmentCount = static_cast<uint32_t>(config.renderpass->Targets[0].attachments.size());
+	uint32_t AttachmentCount = static_cast<uint32_t>(config.renderpass->Targets[0].attachments.Size());
 	for (uint32_t i = 0; i < AttachmentCount; ++i) {
 		if (config.renderpass->Targets[0].attachments[i].type & RenderTargetAttachmentType::eRender_Target_Attachment_Type_Color) {
 			ColorAttachmentCount++;
